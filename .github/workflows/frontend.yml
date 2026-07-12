@@ -1,0 +1,198 @@
+name: Frontend Docker Build & Kubernetes Deploy
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: Kubernetes Deployment & Container Name
+        required: true
+        type: string
+
+      image_name:
+        description: GHCR Image Name
+        required: true
+        type: string
+
+      namespace:
+        description: Kubernetes Namespace
+        required: true
+        type: string
+
+      docker_context:
+        required: false
+        default: .
+        type: string
+
+      dockerfile:
+        required: false
+        default: Dockerfile
+        type: string
+
+      node_version:
+        required: false
+        default: "22"
+        type: string
+
+      ssh_port:
+        required: false
+        default: 22
+        type: number
+
+      kubeconfig:
+        required: false
+        default: /home/deploy/.kube/config
+        type: string
+
+      rollout_timeout:
+        required: false
+        default: 180s
+        type: string
+
+      build_args:
+        required: false
+        default: ""
+        type: string
+
+      push_latest:
+        required: false
+        default: true
+        type: boolean
+
+    secrets:
+      GHCR_TOKEN:
+        required: true
+
+      SSH_KEY:
+        required: true
+
+      VPS_HOST:
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: deploy-${{ inputs.app_name }}
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      #################################################
+      # Checkout
+      #################################################
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      #################################################
+      # Setup Node
+      #################################################
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node_version }}
+
+      #################################################
+      # Semantic Release
+      #################################################
+
+      - name: Install Semantic Release
+        run: |
+          npm install -D \
+            semantic-release \
+            @semantic-release/changelog \
+            @semantic-release/git \
+            @semantic-release/github \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator
+
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx semantic-release
+
+      #################################################
+      # Get Version
+      #################################################
+
+      - name: Get Version
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      #################################################
+      # Login GHCR
+      #################################################
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      #################################################
+      # Build & Push
+      #################################################
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.docker_context }}
+          file: ${{ inputs.dockerfile }}
+
+          push: true
+
+          tags: |
+            ${{ inputs.image_name }}:${{ steps.version.outputs.version }}
+            ${{ inputs.image_name }}:latest
+
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+          build-args: |
+            ${{ inputs.build_args }}
+
+      #################################################
+      # SSH
+      #################################################
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      #################################################
+      # Deploy
+      #################################################
+
+      - name: Deploy
+        run: |
+
+          ssh-keyscan \
+            -p ${{ inputs.ssh_port }} \
+            -H ${{ secrets.VPS_HOST }} \
+            >> ~/.ssh/known_hosts
+
+          ssh \
+            -p ${{ inputs.ssh_port }} \
+            deploy@${{ secrets.VPS_HOST }} << EOF
+
+          export KUBECONFIG=${{ inputs.kubeconfig }}
+
+          kubectl set image deployment/${{ inputs.app_name }} \
+            -n ${{ inputs.namespace }} \
+            ${{ inputs.app_name }}=${{ inputs.image_name }}:${{ steps.version.outputs.version }}
+
+          kubectl rollout status \
+            deployment/${{ inputs.app_name }} \
+            -n ${{ inputs.namespace }} \
+            --timeout=${{ inputs.rollout_timeout }}
+
+          kubectl get pods \
+            -n ${{ inputs.namespace }}
+
+          EOF
