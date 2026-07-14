@@ -66,6 +66,8 @@ on:
 permissions:
   contents: write
   packages: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: deploy-${{ inputs.app_name }}
@@ -111,7 +113,7 @@ jobs:
 
       - name: Semantic Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: npx semantic-release
 
       #################################################
