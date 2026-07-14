@@ -153,9 +153,6 @@ jobs:
             ${{ inputs.image_name }}:${{ steps.version.outputs.version }}
             ${{ inputs.image_name }}:latest
 
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
           build-args: |
             ${{ inputs.build_args }}
 
