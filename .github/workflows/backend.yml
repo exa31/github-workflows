@@ -1,6 +1,50 @@
 name: Backend Docker Build & Kubernetes Deploy
 
 on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: Kubernetes Deployment & Container name
+        required: true
+        type: string
+      namespace:
+        description: Kubernetes Namespace
+        required: true
+        type: string
+      image_name:
+        description: GHCR Image Name
+        required: true
+        type: string
+      docker_context:
+        required: false
+        default: .
+        type: string
+      dockerfile:
+        required: false
+        default: Dockerfile
+        type: string
+      ssh_port:
+        description: SSH Port
+        required: false
+        default: '22'
+        type: string
+      kubeconfig:
+        required: false
+        default: /home/deploy/.kube/config
+        type: string
+      rollout_timeout:
+        required: false
+        default: 180s
+        type: string
+      build_args:
+        required: false
+        default: ""
+        type: string
+      push_latest:
+        required: false
+        default: true
+        type: boolean
+
   workflow_call:
     inputs:
       app_name:
