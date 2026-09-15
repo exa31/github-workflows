@@ -167,14 +167,17 @@ jobs:
         run: npx semantic-release
 
       #################################################
-      # Get Version
+      # Get Version & SHA
       #################################################
 
-      - name: Get Version
+      - name: Get Version and SHA
         id: version
         run: |
-          VERSION=$(git describe --tags --abbrev=0)
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          SHORT_SHA=$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "deploy_tag=${VERSION}-${SHORT_SHA}" >> $GITHUB_OUTPUT
 
       #################################################
       # Login GHCR
@@ -198,8 +201,9 @@ jobs:
           push: true
 
           tags: |
+            ${{ inputs.image_name }}:${{ steps.version.outputs.deploy_tag }}
             ${{ inputs.image_name }}:${{ steps.version.outputs.version }}
-            ${{ inputs.image_name }}:latest
+            ${{ inputs.push_latest && format('{0}:latest', inputs.image_name) || '' }}
 
           build-args: |
             ${{ inputs.build_args }}
@@ -232,7 +236,7 @@ jobs:
 
           kubectl set image deployment/${{ inputs.app_name }} \
             -n ${{ inputs.namespace }} \
-            ${{ inputs.app_name }}=${{ inputs.image_name }}:${{ steps.version.outputs.version }}
+            ${{ inputs.app_name }}=${{ inputs.image_name }}:${{ steps.version.outputs.deploy_tag }}
 
           kubectl rollout status \
             deployment/${{ inputs.app_name }} \
