@@ -1,0 +1,396 @@
+name: Flutter Android Build & Play Store Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Application Name"
+        required: true
+        type: string
+      flutter_version:
+        description: "Flutter Version (e.g. 3.x, 3.24.x, or stable)"
+        required: false
+        default: "3.x"
+        type: string
+      java_version:
+        description: "Java JDK Version"
+        required: false
+        default: "17"
+        type: string
+      build_type:
+        description: "Build Output: appbundle, apk, or both"
+        required: false
+        default: "appbundle"
+        type: string
+      enable_semantic_release:
+        description: "Run Semantic Release for automated version tagging and GitHub release"
+        required: false
+        default: true
+        type: boolean
+      update_pubspec:
+        description: "Auto-bump version in pubspec.yaml and commit back to repository"
+        required: false
+        default: true
+        type: boolean
+      build_name:
+        description: "App Version Name override (e.g. 1.0.0). Defaults to semantic release tag"
+        required: false
+        default: ""
+        type: string
+      build_number:
+        description: "App Version Code override (integer). Defaults to github.run_number"
+        required: false
+        default: ""
+        type: string
+      build_args:
+        description: "Additional flutter build arguments (e.g. --dart-define=...)"
+        required: false
+        default: ""
+        type: string
+      package_name:
+        description: "Android Package Name (required for Google Play Deploy, e.g. com.company.app)"
+        required: false
+        default: ""
+        type: string
+      upload_to_play_store:
+        description: "Deploy to Google Play Console"
+        required: false
+        default: true
+        type: boolean
+      track:
+        description: "Google Play Track: internal, alpha, beta, production"
+        required: false
+        default: "internal"
+        type: string
+      status:
+        description: "Google Play Release Status: completed, draft, inProgress, halted"
+        required: false
+        default: "completed"
+        type: string
+
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application Name"
+        required: true
+        type: string
+      flutter_version:
+        description: "Flutter Version (e.g. 3.x, 3.24.x, or stable)"
+        required: false
+        default: "3.x"
+        type: string
+      java_version:
+        description: "Java JDK Version"
+        required: false
+        default: "17"
+        type: string
+      build_type:
+        description: "Build Output: appbundle, apk, or both"
+        required: false
+        default: "appbundle"
+        type: string
+      enable_semantic_release:
+        description: "Run Semantic Release for automated version tagging and GitHub release"
+        required: false
+        default: true
+        type: boolean
+      update_pubspec:
+        description: "Auto-bump version in pubspec.yaml and commit back to repository"
+        required: false
+        default: true
+        type: boolean
+      build_name:
+        description: "App Version Name override (e.g. 1.0.0). Defaults to semantic release tag"
+        required: false
+        default: ""
+        type: string
+      build_number:
+        description: "App Version Code override (integer). Defaults to github.run_number"
+        required: false
+        default: ""
+        type: string
+      build_args:
+        description: "Additional flutter build arguments (e.g. --dart-define=...)"
+        required: false
+        default: ""
+        type: string
+      package_name:
+        description: "Android Package Name (required for Google Play Deploy, e.g. com.company.app)"
+        required: false
+        default: ""
+        type: string
+      upload_to_play_store:
+        description: "Deploy to Google Play Console"
+        required: false
+        default: true
+        type: boolean
+      track:
+        description: "Google Play Track: internal, alpha, beta, production"
+        required: false
+        default: "internal"
+        type: string
+      status:
+        description: "Google Play Release Status: completed, draft, inProgress, halted"
+        required: false
+        default: "completed"
+        type: string
+
+    secrets:
+      ANDROID_KEYSTORE_BASE64:
+        description: "Base64 encoded upload keystore .jks file"
+        required: true
+      ANDROID_KEYSTORE_PASSWORD:
+        description: "Keystore password"
+        required: true
+      ANDROID_KEY_ALIAS:
+        description: "Key alias"
+        required: true
+      ANDROID_KEY_PASSWORD:
+        description: "Key password"
+        required: true
+      PLAY_STORE_SERVICE_ACCOUNT_JSON:
+        description: "Google Play Console Service Account JSON Key (content in plain text or base64)"
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: deploy-android-${{ inputs.app_name }}
+  cancel-in-progress: true
+
+jobs:
+  build-deploy-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      #################################################
+      # Checkout Repository
+      #################################################
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      #################################################
+      # Setup Node (Semantic Release)
+      #################################################
+      - name: Setup Node (Semantic Release)
+        if: ${{ inputs.enable_semantic_release }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      #################################################
+      # Install Semantic Release
+      #################################################
+      - name: Install Semantic Release
+        if: ${{ inputs.enable_semantic_release }}
+        run: |
+          npm install -D \
+            semantic-release \
+            @semantic-release/changelog \
+            @semantic-release/git \
+            @semantic-release/github \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator
+
+      #################################################
+      # Run Semantic Release
+      #################################################
+      - name: Run Semantic Release
+        if: ${{ inputs.enable_semantic_release }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx semantic-release || echo "Semantic release completed or skipped without new version."
+
+      #################################################
+      # Setup Java JDK
+      #################################################
+      - name: Setup Java JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ inputs.java_version }}
+          cache: "gradle"
+
+      #################################################
+      # Setup Flutter
+      #################################################
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ inputs.flutter_version }}
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+
+      #################################################
+      # Install Flutter Dependencies
+      #################################################
+      - name: Install Dependencies
+        run: flutter pub get
+
+      #################################################
+      # Setup Android Keystore & key.properties
+      #################################################
+      - name: Setup Keystore & Signing Configuration
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          mkdir -p android/app
+
+          # Decode Keystore to android/app and android/
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+          cp android/app/upload-keystore.jks android/upload-keystore.jks
+
+          # Create android/key.properties
+          cat <<EOF > android/key.properties
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+
+          echo "✅ Keystore and key.properties created successfully."
+
+      #################################################
+      # Determine Version & Build Number
+      #################################################
+      - name: Calculate Version and Build Number
+        id: versioning
+        run: |
+          git fetch --tags --force 2>/dev/null || true
+
+          # 1. Version Name (Semver)
+          if [ -n "${{ inputs.build_name }}" ]; then
+            BUILD_NAME="${{ inputs.build_name }}"
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$LATEST_TAG" ]; then
+              BUILD_NAME="${LATEST_TAG#v}"
+            else
+              PUBSPEC_VER=$(grep -E '^version:' pubspec.yaml 2>/dev/null | awk '{print $2}' | cut -d'+' -f1 || echo "")
+              BUILD_NAME="${PUBSPEC_VER:-1.0.0}"
+            fi
+          fi
+
+          # 2. Version Code (Integer)
+          if [ -n "${{ inputs.build_number }}" ]; then
+            BUILD_NUMBER="${{ inputs.build_number }}"
+          else
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+
+          echo "build_name=$BUILD_NAME" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "🚀 Build Name: $BUILD_NAME, Build Number (Version Code): $BUILD_NUMBER"
+
+      #################################################
+      # Auto-bump pubspec.yaml & Commit
+      #################################################
+      - name: Update pubspec.yaml and Commit
+        if: ${{ inputs.update_pubspec }}
+        env:
+          BUILD_NAME: ${{ steps.versioning.outputs.build_name }}
+          BUILD_NUMBER: ${{ steps.versioning.outputs.build_number }}
+        run: |
+          if [ -f pubspec.yaml ]; then
+            echo "📝 Updating pubspec.yaml to version: ${BUILD_NAME}+${BUILD_NUMBER}..."
+            sed -i.bak -E "s/^version: .*/version: ${BUILD_NAME}+${BUILD_NUMBER}/" pubspec.yaml && rm -f pubspec.yaml.bak
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            if [ -n "$(git status --porcelain pubspec.yaml)" ]; then
+              git add pubspec.yaml
+              git commit -m "chore(release): bump pubspec version to ${BUILD_NAME}+${BUILD_NUMBER} [skip ci]"
+              
+              BRANCH_NAME="${{ github.ref_name }}"
+              if [ -n "$BRANCH_NAME" ]; then
+                git pull --rebase origin "$BRANCH_NAME" 2>/dev/null || true
+                git push origin HEAD:"$BRANCH_NAME" || echo "⚠️ Could not push to $BRANCH_NAME (branch may be protected), continuing build."
+              fi
+            else
+              echo "ℹ️ pubspec.yaml is already up-to-date (${BUILD_NAME}+${BUILD_NUMBER})."
+            fi
+          fi
+
+      #################################################
+      # Build Android App Bundle (AAB)
+      #################################################
+      - name: Build Android App Bundle (.aab)
+        if: ${{ inputs.build_type == 'appbundle' || inputs.build_type == 'both' }}
+        run: |
+          flutter build appbundle --release \
+            --build-name="${{ steps.versioning.outputs.build_name }}" \
+            --build-number="${{ steps.versioning.outputs.build_number }}" \
+            ${{ inputs.build_args }}
+
+      #################################################
+      # Build Android APK
+      #################################################
+      - name: Build Android APK
+        if: ${{ inputs.build_type == 'apk' || inputs.build_type == 'both' }}
+        run: |
+          flutter build apk --release \
+            --build-name="${{ steps.versioning.outputs.build_name }}" \
+            --build-number="${{ steps.versioning.outputs.build_number }}" \
+            ${{ inputs.build_args }}
+
+      #################################################
+      # Upload Artifacts to GitHub Actions
+      #################################################
+      - name: Upload AAB Artifact
+        if: ${{ inputs.build_type == 'appbundle' || inputs.build_type == 'both' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}-aab
+          path: build/app/outputs/bundle/release/*.aab
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload APK Artifact
+        if: ${{ inputs.build_type == 'apk' || inputs.build_type == 'both' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}-apk
+          path: build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      #################################################
+      # Deploy to Google Play Console
+      #################################################
+      - name: Prepare Google Play Service Account
+        if: ${{ inputs.upload_to_play_store && secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON != '' }}
+        id: play_auth
+        env:
+          SERVICE_ACCOUNT_RAW: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          mkdir -p $RUNNER_TEMP
+          SERVICE_ACCOUNT_FILE="$RUNNER_TEMP/service_account.json"
+
+          # Check if input is base64 encoded or plain text json
+          if echo "$SERVICE_ACCOUNT_RAW" | grep -q '^{'; then
+            echo "$SERVICE_ACCOUNT_RAW" > "$SERVICE_ACCOUNT_FILE"
+          else
+            echo "$SERVICE_ACCOUNT_RAW" | base64 --decode > "$SERVICE_ACCOUNT_FILE"
+          fi
+
+          echo "sa_file=$SERVICE_ACCOUNT_FILE" >> $GITHUB_OUTPUT
+
+      - name: Deploy to Google Play Console
+        if: ${{ inputs.upload_to_play_store && secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON != '' && inputs.package_name != '' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ steps.play_auth.outputs.sa_file }}
+          packageName: ${{ inputs.package_name }}
+          releaseFiles: build/app/outputs/bundle/release/*.aab
+          track: ${{ inputs.track }}
+          status: ${{ inputs.status }}

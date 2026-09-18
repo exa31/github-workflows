@@ -1,0 +1,344 @@
+name: Flutter iOS Build & TestFlight Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      app_name:
+        description: "Application Name"
+        required: true
+        type: string
+      flutter_version:
+        description: "Flutter Version (e.g. 3.x, 3.24.x, or stable)"
+        required: false
+        default: "3.x"
+        type: string
+      enable_semantic_release:
+        description: "Run Semantic Release for automated version tagging and GitHub release"
+        required: false
+        default: true
+        type: boolean
+      update_pubspec:
+        description: "Auto-bump version in pubspec.yaml and commit back to repository"
+        required: false
+        default: true
+        type: boolean
+      build_name:
+        description: "App Version Name override (e.g. 1.0.0). Defaults to semantic release tag"
+        required: false
+        default: ""
+        type: string
+      build_number:
+        description: "App Build Number override (integer). Defaults to github.run_number"
+        required: false
+        default: ""
+        type: string
+      build_args:
+        description: "Additional flutter build arguments (e.g. --dart-define=... --export-options-plist=...)"
+        required: false
+        default: ""
+        type: string
+      upload_to_testflight:
+        description: "Deploy to Apple TestFlight"
+        required: false
+        default: true
+        type: boolean
+      runs_on:
+        description: "Runner to use (macos-latest, macos-14, or self-hosted)"
+        required: false
+        default: "macos-latest"
+        type: string
+
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Application Name"
+        required: true
+        type: string
+      flutter_version:
+        description: "Flutter Version (e.g. 3.x, 3.24.x, or stable)"
+        required: false
+        default: "3.x"
+        type: string
+      enable_semantic_release:
+        description: "Run Semantic Release for automated version tagging and GitHub release"
+        required: false
+        default: true
+        type: boolean
+      update_pubspec:
+        description: "Auto-bump version in pubspec.yaml and commit back to repository"
+        required: false
+        default: true
+        type: boolean
+      build_name:
+        description: "App Version Name override (e.g. 1.0.0). Defaults to semantic release tag"
+        required: false
+        default: ""
+        type: string
+      build_number:
+        description: "App Build Number override (integer). Defaults to github.run_number"
+        required: false
+        default: ""
+        type: string
+      build_args:
+        description: "Additional flutter build arguments (e.g. --dart-define=... --export-options-plist=...)"
+        required: false
+        default: ""
+        type: string
+      upload_to_testflight:
+        description: "Deploy to Apple TestFlight"
+        required: false
+        default: true
+        type: boolean
+      runs_on:
+        description: "Runner to use (macos-latest, macos-14, or self-hosted)"
+        required: false
+        default: "macos-latest"
+        type: string
+
+    secrets:
+      APPLE_CERTIFICATE_BASE64:
+        description: "Apple Distribution Certificate (.p12) base64 encoded"
+        required: true
+      APPLE_CERTIFICATE_PASSWORD:
+        description: "Password for the .p12 certificate"
+        required: true
+      APPLE_PROVISIONING_PROFILE_BASE64:
+        description: "Apple Provisioning Profile (.mobileprovision) base64 encoded"
+        required: true
+      APP_STORE_CONNECT_API_KEY_BASE64:
+        description: "App Store Connect API Key (.p8) in base64 or plain text"
+        required: false
+      APP_STORE_CONNECT_KEY_ID:
+        description: "App Store Connect API Key ID (10 characters)"
+        required: false
+      APP_STORE_CONNECT_ISSUER_ID:
+        description: "App Store Connect Issuer ID (UUID)"
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: deploy-ios-${{ inputs.app_name }}
+  cancel-in-progress: true
+
+jobs:
+  build-deploy-ios:
+    runs-on: ${{ inputs.runs_on }}
+
+    steps:
+      #################################################
+      # Checkout Repository
+      #################################################
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      #################################################
+      # Setup Node (Semantic Release)
+      #################################################
+      - name: Setup Node (Semantic Release)
+        if: ${{ inputs.enable_semantic_release }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      #################################################
+      # Install Semantic Release
+      #################################################
+      - name: Install Semantic Release
+        if: ${{ inputs.enable_semantic_release }}
+        run: |
+          npm install -D \
+            semantic-release \
+            @semantic-release/changelog \
+            @semantic-release/git \
+            @semantic-release/github \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator
+
+      #################################################
+      # Run Semantic Release
+      #################################################
+      - name: Run Semantic Release
+        if: ${{ inputs.enable_semantic_release }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx semantic-release || echo "Semantic release completed or skipped without new version."
+
+      #################################################
+      # Setup Flutter
+      #################################################
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ inputs.flutter_version }}
+          cache: true
+          cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
+
+      - name: Precache iOS Engine
+        run: flutter precache --ios
+
+      #################################################
+      # Install Flutter Dependencies
+      #################################################
+      - name: Install Dependencies
+        run: flutter pub get
+
+      #################################################
+      # Setup Apple Certificate and Keychain
+      #################################################
+      - name: Install Apple Certificate and Provisioning Profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: "ci-build-keychain-temporary-pass"
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Decode certificate and provisioning profile
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
+          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate to keychain
+          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Install provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          echo "✅ Certificate and Provisioning Profile installed successfully."
+
+      #################################################
+      # Determine Version & Build Number
+      #################################################
+      - name: Calculate Version and Build Number
+        id: versioning
+        run: |
+          git fetch --tags --force 2>/dev/null || true
+
+          # 1. Version Name (Semver)
+          if [ -n "${{ inputs.build_name }}" ]; then
+            BUILD_NAME="${{ inputs.build_name }}"
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$LATEST_TAG" ]; then
+              BUILD_NAME="${LATEST_TAG#v}"
+            else
+              PUBSPEC_VER=$(grep -E '^version:' pubspec.yaml 2>/dev/null | awk '{print $2}' | cut -d'+' -f1 || echo "")
+              BUILD_NAME="${PUBSPEC_VER:-1.0.0}"
+            fi
+          fi
+
+          # 2. Version Code / Build Number (Integer)
+          if [ -n "${{ inputs.build_number }}" ]; then
+            BUILD_NUMBER="${{ inputs.build_number }}"
+          else
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+
+          echo "build_name=$BUILD_NAME" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "🚀 Build Name: $BUILD_NAME, Build Number: $BUILD_NUMBER"
+
+      #################################################
+      # Auto-bump pubspec.yaml & Commit
+      #################################################
+      - name: Update pubspec.yaml and Commit
+        if: ${{ inputs.update_pubspec }}
+        env:
+          BUILD_NAME: ${{ steps.versioning.outputs.build_name }}
+          BUILD_NUMBER: ${{ steps.versioning.outputs.build_number }}
+        run: |
+          if [ -f pubspec.yaml ]; then
+            echo "📝 Updating pubspec.yaml to version: ${BUILD_NAME}+${BUILD_NUMBER}..."
+            sed -i.bak -E "s/^version: .*/version: ${BUILD_NAME}+${BUILD_NUMBER}/" pubspec.yaml && rm -f pubspec.yaml.bak
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            if [ -n "$(git status --porcelain pubspec.yaml)" ]; then
+              git add pubspec.yaml
+              git commit -m "chore(release): bump pubspec version to ${BUILD_NAME}+${BUILD_NUMBER} [skip ci]"
+              
+              BRANCH_NAME="${{ github.ref_name }}"
+              if [ -n "$BRANCH_NAME" ]; then
+                git pull --rebase origin "$BRANCH_NAME" 2>/dev/null || true
+                git push origin HEAD:"$BRANCH_NAME" || echo "⚠️ Could not push to $BRANCH_NAME (branch may be protected), continuing build."
+              fi
+            else
+              echo "ℹ️ pubspec.yaml is already up-to-date (${BUILD_NAME}+${BUILD_NUMBER})."
+            fi
+          fi
+
+      #################################################
+      # Build IPA
+      #################################################
+      - name: Build iOS IPA (.ipa)
+        run: |
+          flutter build ipa --release \
+            --build-name="${{ steps.versioning.outputs.build_name }}" \
+            --build-number="${{ steps.versioning.outputs.build_number }}" \
+            ${{ inputs.build_args }}
+
+      #################################################
+      # Upload Artifact to GitHub Actions
+      #################################################
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}-ipa
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      #################################################
+      # Deploy to TestFlight
+      #################################################
+      - name: Prepare App Store Connect Key
+        if: ${{ inputs.upload_to_testflight && secrets.APP_STORE_CONNECT_API_KEY_BASE64 != '' }}
+        id: asc_key
+        env:
+          RAW_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+        run: |
+          if echo "$RAW_KEY" | grep -q "BEGIN"; then
+            DECODED="$RAW_KEY"
+          else
+            DECODED=$(echo "$RAW_KEY" | base64 --decode)
+          fi
+
+          echo "key<<EOF" >> $GITHUB_OUTPUT
+          echo "$DECODED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Deploy to TestFlight
+        if: ${{ inputs.upload_to_testflight && secrets.APP_STORE_CONNECT_API_KEY_BASE64 != '' && secrets.APP_STORE_CONNECT_KEY_ID != '' && secrets.APP_STORE_CONNECT_ISSUER_ID != '' }}
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: build/ios/ipa/*.ipa
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ steps.asc_key.outputs.key }}
+
+      #################################################
+      # Clean up Keychain
+      #################################################
+      - name: Clean up Keychain and Provisioning Profiles
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null || true

@@ -13,6 +13,8 @@ Branch: `main`
 |---|---|---|
 | Backend | `.github/workflows/backend.yml` | Build Docker + deploy backend ke K8s |
 | Frontend | `.github/workflows/frontend.yml` | Build Docker + deploy frontend ke K8s |
+| Flutter Android | `.github/workflows/flutter-android.yml` | Build APK/AAB + deploy ke Google Play Console |
+| Flutter iOS | `.github/workflows/flutter-ios.yml` | Build IPA + deploy ke Apple TestFlight / App Store |
 
 ---
 
@@ -136,10 +138,179 @@ jobs:
 
 ---
 
+## Flutter Android
+
+Workflow ini otomatis melakukan setup Java, Flutter, decode keystore `.jks`, generate `android/key.properties`, build `.aab` / `.apk`, upload ke GitHub Artifacts, serta deploy ke **Google Play Console**.
+
+### Inputs
+
+| Input | Required | Default | Deskripsi |
+|---|---|---|---|
+| `app_name` | ✅ | - | Nama aplikasi mobile (misal: `cyber-mobile`) |
+| `flutter_version` | ❌ | `3.x` | Versi Flutter SDK (`3.x`, `3.24.x`, atau `stable`) |
+| `java_version` | ❌ | `17` | Versi Java JDK (`17` atau `21`) |
+| `build_type` | ❌ | `appbundle` | Tipe build: `appbundle`, `apk`, atau `both` |
+| `enable_semantic_release` | ❌ | `true` | Otomatis hitung semver, buat Git Tag, dan GitHub Release |
+| `update_pubspec` | ❌ | `true` | Otomatis update baris versi di `pubspec.yaml` & push commit |
+| `build_name` | ❌ | - | Override manual versi (misal: `1.0.0`) jika tidak ingin auto |
+| `build_number` | ❌ | - | Override integer Version Code. Default: `github.run_number` |
+| `build_args` | ❌ | `""` | Argumen tambahan (misal: `--dart-define=ENV=prod`) |
+| `package_name` | ❌ | `""` | Package name Android (wajib jika upload Play Store) |
+| `upload_to_play_store` | ❌ | `true` | Upload ke Google Play Console |
+| `track` | ❌ | `internal` | Track Play Store (`internal`, `alpha`, `beta`, `production`) |
+| `status` | ❌ | `completed` | Status rilis (`completed`, `draft`, `inProgress`) |
+
+### Secrets
+
+| Secret | Required | Deskripsi |
+|---|---|---|
+| `ANDROID_KEYSTORE_BASE64` | ✅ | Keystore `.jks` di-encode ke format base64 |
+| `ANDROID_KEYSTORE_PASSWORD` | ✅ | Password keystore |
+| `ANDROID_KEY_ALIAS` | ✅ | Nama alias key |
+| `ANDROID_KEY_PASSWORD` | ✅ | Password key alias |
+| `PLAY_STORE_SERVICE_ACCOUNT_JSON` | ❌ | Isi Service Account JSON dari Google Play Console |
+
+### Cara Pakai
+
+```yaml
+name: Deploy Android (Flutter)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-android:
+    uses: exa31/github-workflows/.github/workflows/flutter-android.yml@main
+    with:
+      app_name: cyber-mobile
+      flutter_version: 3.x
+      package_name: com.exa.cybermobile
+      build_type: appbundle
+      track: internal
+      upload_to_play_store: true
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      PLAY_STORE_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+```
+
+---
+
+## Flutter iOS
+
+Workflow ini berjalan di runner **macOS** (`macos-latest`), mengimpor Apple Distribution Certificate `.p12` ke temporary keychain, memasang Provisioning Profile, build `.ipa`, upload ke GitHub Artifacts, serta deploy ke **Apple TestFlight / App Store**.
+
+### Inputs
+
+| Input | Required | Default | Deskripsi |
+|---|---|---|---|
+| `app_name` | ✅ | - | Nama aplikasi mobile (misal: `cyber-mobile`) |
+| `flutter_version` | ❌ | `3.x` | Versi Flutter SDK (`3.x`, `3.24.x`, atau `stable`) |
+| `enable_semantic_release` | ❌ | `true` | Otomatis hitung semver, buat Git Tag, dan GitHub Release |
+| `update_pubspec` | ❌ | `true` | Otomatis update baris versi di `pubspec.yaml` & push commit |
+| `build_name` | ❌ | - | Override manual versi (misal: `1.0.0`) jika tidak ingin auto |
+| `build_number` | ❌ | - | Override integer Build Number. Default: `github.run_number` |
+| `build_args` | ❌ | `""` | Argumen tambahan `flutter build ipa` |
+| `upload_to_testflight` | ❌ | `true` | Upload ke TestFlight |
+| `runs_on` | ❌ | `macos-latest` | Runner OS (`macos-latest`, `macos-14`, atau self-hosted) |
+
+### Secrets
+
+| Secret | Required | Deskripsi |
+|---|---|---|
+| `APPLE_CERTIFICATE_BASE64` | ✅ | Sertifikat distribusi `.p12` di-encode base64 |
+| `APPLE_CERTIFICATE_PASSWORD` | ✅ | Password sertifikat `.p12` |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | ✅ | File `.mobileprovision` di-encode base64 |
+| `APP_STORE_CONNECT_API_KEY_BASE64` | ❌ | Private Key App Store Connect (`AuthKey_XXXX.p8`) |
+| `APP_STORE_CONNECT_KEY_ID` | ❌ | Key ID 10 karakter dari App Store Connect |
+| `APP_STORE_CONNECT_ISSUER_ID` | ❌ | Issuer ID (UUID) dari App Store Connect |
+
+### Cara Pakai
+
+```yaml
+name: Deploy iOS (Flutter)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy-ios:
+    uses: exa31/github-workflows/.github/workflows/flutter-ios.yml@main
+    with:
+      app_name: cyber-mobile
+      flutter_version: 3.x
+      upload_to_testflight: true
+    secrets:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+```
+
+---
+
+## Panduan Encode Secrets Mobile ke Base64
+
+Jalankan perintah ini di terminal Mac / Linux untuk mendapatkan string base64 untuk GitHub Secrets:
+
+### 1. Android Keystore
+```bash
+# macOS (langsung copy ke clipboard)
+base64 -i upload-keystore.jks | pbcopy
+
+# Linux
+base64 -w 0 upload-keystore.jks
+```
+
+### 2. Apple iOS Certificate (.p12)
+```bash
+# macOS
+base64 -i Certificates.p12 | pbcopy
+```
+
+### 3. Apple Provisioning Profile (.mobileprovision)
+```bash
+# macOS
+base64 -i profile.mobileprovision | pbcopy
+```
+
+### 4. App Store Connect API Key (.p8)
+```bash
+# macOS
+base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
+```
+
+---
+
 ## Setup Secrets di Repo Tujuan
 
-Buka Settings > Secrets and variables > Actions, tambahin:
+Buka **Settings > Secrets and variables > Actions** di repositori tujuan:
 
+### Untuk Backend & Frontend:
 - `GHCR_TOKEN` — Personal Access Token dengan scope `write:packages`
 - `SSH_KEY` — Private key SSH (bisa pake `deploy` user)
 - `VPS_HOST` — IP/domain VPS (contoh: `103.xxx.xxx.xxx`)
+
+### Untuk Flutter Android:
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+- `PLAY_STORE_SERVICE_ACCOUNT_JSON`
+
+### Untuk Flutter iOS:
+- `APPLE_CERTIFICATE_BASE64`
+- `APPLE_CERTIFICATE_PASSWORD`
+- `APPLE_PROVISIONING_PROFILE_BASE64`
+- `APP_STORE_CONNECT_API_KEY_BASE64`
+- `APP_STORE_CONNECT_KEY_ID`
+- `APP_STORE_CONNECT_ISSUER_ID`
+
