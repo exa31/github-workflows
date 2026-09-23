@@ -291,6 +291,11 @@ jobs:
             echo "CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution" >> ios/Flutter/Release.xcconfig
           fi
 
+          # Automatically patch project.pbxproj on the fly (Zero-Config CI Override)
+          if [ -f "ios/Runner.xcodeproj/project.pbxproj" ]; then
+            sed -i '' -e 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' ios/Runner.xcodeproj/project.pbxproj 2>/dev/null || true
+          fi
+
           # Create ExportOptions.plist using plistlib
           EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist
           python3 -c "import plistlib, sys; plistlib.dump({'method': 'app-store', 'signingStyle': 'manual', 'teamID': sys.argv[2], 'signingCertificate': 'Apple Distribution', 'provisioningProfiles': {sys.argv[3]: sys.argv[4]}}, open(sys.argv[1], 'wb'))" "$EXPORT_OPTIONS_PATH" "$TEAM_ID" "$APP_ID" "$PROFILE_NAME"
