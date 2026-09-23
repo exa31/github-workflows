@@ -291,29 +291,9 @@ jobs:
             echo "CODE_SIGN_IDENTITY[sdk=iphoneos*] = Apple Distribution" >> ios/Flutter/Release.xcconfig
           fi
 
-          # Create ExportOptions.plist
+          # Create ExportOptions.plist using plistlib
           EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist
-          cat <<EOF > "$EXPORT_OPTIONS_PATH"
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>method</key>
-    <string>app-store</string>
-    <key>signingStyle</key>
-    <string>manual</string>
-    <key>teamID</key>
-    <string>$TEAM_ID</string>
-    <key>provisioningProfiles</key>
-    <dict>
-        <key>$APP_ID</key>
-        <string>$PROFILE_NAME</string>
-    </dict>
-    <key>signingCertificate</key>
-    <string>Apple Distribution</string>
-</dict>
-</plist>
-EOF
+          python3 -c "import plistlib, os; plistlib.dump({'method': 'app-store', 'signingStyle': 'manual', 'teamID': os.environ.get('TEAM_ID', ''), 'signingCertificate': 'Apple Distribution', 'provisioningProfiles': {os.environ.get('APP_ID', ''): os.environ.get('PROFILE_NAME', '')}}, open(os.environ.get('EXPORT_OPTIONS_PATH', ''), 'wb'))"
 
           echo "export_options=$EXPORT_OPTIONS_PATH" >> $GITHUB_OUTPUT
           echo "✅ Certificate and Provisioning Profile installed successfully."
