@@ -237,6 +237,7 @@ jobs:
       # Setup Apple Certificate and Keychain
       #################################################
       - name: Install Apple Certificate and Provisioning Profile
+        id: ios_signing
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -248,8 +249,8 @@ jobs:
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
           # Decode certificate and provisioning profile
-          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o "$CERTIFICATE_PATH"
-          echo -n "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode -o "$PP_PATH"
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
 
           # Create temporary keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
@@ -257,14 +258,45 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
           # Import certificate to keychain
-          security import "$CERTIFICATE_PATH" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security default-keychain -s "$KEYCHAIN_PATH"
           security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
 
-          # Install provisioning profile
+          # Install provisioning profile with UUID filename
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PP_UUID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract UUID raw - 2>/dev/null || echo "profile")
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${PP_UUID}.mobileprovision
           cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
 
+          # Extract Team ID and Profile Name
+          TEAM_ID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract TeamIdentifier.0 raw - 2>/dev/null || echo "")
+          APP_ID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract Entitlements.application-identifier raw - 2>/dev/null | sed "s/^${TEAM_ID}\.//" || echo "")
+          PROFILE_NAME=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract Name raw - 2>/dev/null || echo "")
+
+          # Create ExportOptions.plist
+          EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist
+          cat <<EOF > "$EXPORT_OPTIONS_PATH"
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>teamID</key>
+    <string>$TEAM_ID</string>
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>$APP_ID</key>
+        <string>$PROFILE_NAME</string>
+    </dict>
+</dict>
+</plist>
+EOF
+
+          echo "export_options=$EXPORT_OPTIONS_PATH" >> $GITHUB_OUTPUT
           echo "✅ Certificate and Provisioning Profile installed successfully."
 
       #################################################
@@ -334,10 +366,18 @@ jobs:
       #################################################
       - name: Build iOS IPA (.ipa)
         run: |
-          flutter build ipa --release \
-            --build-name="${{ steps.versioning.outputs.build_name }}" \
-            --build-number="${{ steps.versioning.outputs.build_number }}" \
-            ${{ inputs.build_args }}
+          if [ -f "${{ steps.ios_signing.outputs.export_options }}" ]; then
+            flutter build ipa --release \
+              --export-options-plist="${{ steps.ios_signing.outputs.export_options }}" \
+              --build-name="${{ steps.versioning.outputs.build_name }}" \
+              --build-number="${{ steps.versioning.outputs.build_number }}" \
+              ${{ inputs.build_args }}
+          else
+            flutter build ipa --release \
+              --build-name="${{ steps.versioning.outputs.build_name }}" \
+              --build-number="${{ steps.versioning.outputs.build_number }}" \
+              ${{ inputs.build_args }}
+          fi
 
       #################################################
       # Upload Artifact to GitHub Actions
