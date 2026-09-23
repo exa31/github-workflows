@@ -368,11 +368,17 @@ jobs:
       # Deploy to Google Play Console
       #################################################
       - name: Prepare Google Play Service Account
-        if: ${{ inputs.upload_to_play_store && secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON != '' }}
+        if: ${{ inputs.upload_to_play_store }}
         id: play_auth
         env:
           SERVICE_ACCOUNT_RAW: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
         run: |
+          if [ -z "$SERVICE_ACCOUNT_RAW" ]; then
+            echo "⚠️ PLAY_STORE_SERVICE_ACCOUNT_JSON is not configured. Skipping Play Store deployment."
+            echo "configured=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           mkdir -p $RUNNER_TEMP
           SERVICE_ACCOUNT_FILE="$RUNNER_TEMP/service_account.json"
 
@@ -384,9 +390,10 @@ jobs:
           fi
 
           echo "sa_file=$SERVICE_ACCOUNT_FILE" >> $GITHUB_OUTPUT
+          echo "configured=true" >> $GITHUB_OUTPUT
 
       - name: Deploy to Google Play Console
-        if: ${{ inputs.upload_to_play_store && secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON != '' && inputs.package_name != '' }}
+        if: ${{ inputs.upload_to_play_store && steps.play_auth.outputs.configured == 'true' && inputs.package_name != '' }}
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ steps.play_auth.outputs.sa_file }}

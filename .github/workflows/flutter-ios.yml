@@ -310,11 +310,19 @@ jobs:
       # Deploy to TestFlight
       #################################################
       - name: Prepare App Store Connect Key
-        if: ${{ inputs.upload_to_testflight && secrets.APP_STORE_CONNECT_API_KEY_BASE64 != '' }}
+        if: ${{ inputs.upload_to_testflight }}
         id: asc_key
         env:
           RAW_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
         run: |
+          if [ -z "$RAW_KEY" ] || [ -z "$KEY_ID" ] || [ -z "$ISSUER_ID" ]; then
+            echo "⚠️ App Store Connect credentials not fully configured. Skipping TestFlight deployment."
+            echo "configured=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
           if echo "$RAW_KEY" | grep -q "BEGIN"; then
             DECODED="$RAW_KEY"
           else
@@ -324,9 +332,10 @@ jobs:
           echo "key<<EOF" >> $GITHUB_OUTPUT
           echo "$DECODED" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+          echo "configured=true" >> $GITHUB_OUTPUT
 
       - name: Deploy to TestFlight
-        if: ${{ inputs.upload_to_testflight && secrets.APP_STORE_CONNECT_API_KEY_BASE64 != '' && secrets.APP_STORE_CONNECT_KEY_ID != '' && secrets.APP_STORE_CONNECT_ISSUER_ID != '' }}
+        if: ${{ inputs.upload_to_testflight && steps.asc_key.outputs.configured == 'true' }}
         uses: apple-actions/upload-testflight-build@v1
         with:
           app-path: build/ios/ipa/*.ipa
