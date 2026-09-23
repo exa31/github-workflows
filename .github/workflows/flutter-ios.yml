@@ -193,8 +193,10 @@ jobs:
           cache: true
           cache-key: "flutter-:os:-:channel:-:version:-:arch:-:hash:"
 
-      - name: Precache iOS Engine
-        run: flutter precache --ios
+      - name: Precache iOS Engine & Disable SPM
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter precache --ios
 
       #################################################
       # Setup Environment Configuration (.env)
@@ -219,10 +221,17 @@ jobs:
           fi
 
       #################################################
-      # Install Flutter Dependencies
+      # Install Flutter Dependencies & CocoaPods
       #################################################
-      - name: Install Dependencies
-        run: flutter pub get
+      - name: Install Dependencies & CocoaPods
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter pub get
+          if [ -d "ios" ]; then
+            cd ios
+            pod install || pod install --repo-update
+            cd ..
+          fi
 
       #################################################
       # Setup Apple Certificate and Keychain
