@@ -231,7 +231,15 @@ jobs:
       # Install Flutter Dependencies
       #################################################
       - name: Install Dependencies
-        run: flutter pub get
+        run: |
+          if [ ! -f .env ] && [ -f .env.example ]; then
+            echo '📄 Creating .env from .env.example for asset bundling...'
+            cp .env.example .env
+          elif [ ! -f .env ]; then
+            echo '📄 Creating empty .env placeholder...'
+            touch .env
+          fi
+          flutter pub get
 
       #################################################
       # Setup Android Keystore & key.properties
