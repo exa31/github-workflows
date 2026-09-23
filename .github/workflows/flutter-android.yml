@@ -75,6 +75,11 @@ on:
 
   workflow_call:
     inputs:
+      env_content:
+        description: "Content to write to .env file (e.g. key=value lines)"
+        required: false
+        default: ""
+        type: string
       app_name:
         description: "Application Name"
         required: true
