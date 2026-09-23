@@ -3,6 +3,11 @@ name: Flutter iOS Build & TestFlight Deploy
 on:
   workflow_dispatch:
     inputs:
+      env_content:
+        description: "Content to write to .env file (e.g. key=value lines)"
+        required: false
+        default: ""
+        type: string
       app_name:
         description: "Application Name"
         required: true
@@ -96,6 +101,9 @@ on:
         type: string
 
     secrets:
+      ENV_FILE:
+        description: "Encrypted .env content from GitHub Secrets"
+        required: false
       APPLE_CERTIFICATE_BASE64:
         description: "Apple Distribution Certificate (.p12) base64 encoded"
         required: true
@@ -184,18 +192,32 @@ jobs:
         run: flutter precache --ios
 
       #################################################
+      # Setup Environment Configuration (.env)
+      #################################################
+      - name: Setup Environment Configuration (.env)
+        env:
+          ENV_CONTENT: ${{ inputs.env_content }}
+          SECRET_ENV_CONTENT: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -n "$SECRET_ENV_CONTENT" ]; then
+            echo "📄 Writing .env from secret ENV_FILE..."
+            echo "$SECRET_ENV_CONTENT" > .env
+          elif [ -n "$ENV_CONTENT" ]; then
+            echo "📄 Writing .env from inputs.env_content..."
+            echo "$ENV_CONTENT" > .env
+          elif [ -f .env.example ]; then
+            echo "📄 Writing .env from .env.example template..."
+            cp .env.example .env
+          else
+            echo "📄 Creating empty .env placeholder..."
+            touch .env
+          fi
+
+      #################################################
       # Install Flutter Dependencies
       #################################################
       - name: Install Dependencies
-        run: |
-          if [ ! -f .env ] && [ -f .env.example ]; then
-            echo '📄 Creating .env from .env.example for asset bundling...'
-            cp .env.example .env
-          elif [ ! -f .env ]; then
-            echo '📄 Creating empty .env placeholder...'
-            touch .env
-          fi
-          flutter pub get
+        run: flutter pub get
 
       #################################################
       # Setup Apple Certificate and Keychain
