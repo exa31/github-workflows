@@ -392,6 +392,18 @@ jobs:
       #################################################
       # Deploy to TestFlight
       #################################################
+      - name: Find Built IPA Path
+        if: ${{ inputs.upload_to_testflight }}
+        id: find_ipa
+        run: |
+          IPA_FILE=$(find build/ios/ipa -name "*.ipa" -type f | head -n 1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "❌ No .ipa file found in build/ios/ipa/"
+            exit 1
+          fi
+          echo "ipa_path=$IPA_FILE" >> $GITHUB_OUTPUT
+          echo "📦 Found IPA: $IPA_FILE"
+
       - name: Prepare App Store Connect Key
         if: ${{ inputs.upload_to_testflight }}
         id: asc_key
@@ -421,7 +433,7 @@ jobs:
         if: ${{ inputs.upload_to_testflight && steps.asc_key.outputs.configured == 'true' }}
         uses: apple-actions/upload-testflight-build@v1
         with:
-          app-path: build/ios/ipa/*.ipa
+          app-path: ${{ steps.find_ipa.outputs.ipa_path }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ steps.asc_key.outputs.key }}
