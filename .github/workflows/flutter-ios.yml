@@ -293,7 +293,7 @@ jobs:
 
           # Create ExportOptions.plist using plistlib
           EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist
-          python3 -c "import plistlib, os; plistlib.dump({'method': 'app-store', 'signingStyle': 'manual', 'teamID': os.environ.get('TEAM_ID', ''), 'signingCertificate': 'Apple Distribution', 'provisioningProfiles': {os.environ.get('APP_ID', ''): os.environ.get('PROFILE_NAME', '')}}, open(os.environ.get('EXPORT_OPTIONS_PATH', ''), 'wb'))"
+          python3 -c "import plistlib, sys; plistlib.dump({'method': 'app-store', 'signingStyle': 'manual', 'teamID': sys.argv[2], 'signingCertificate': 'Apple Distribution', 'provisioningProfiles': {sys.argv[3]: sys.argv[4]}}, open(sys.argv[1], 'wb'))" "$EXPORT_OPTIONS_PATH" "$TEAM_ID" "$APP_ID" "$PROFILE_NAME"
 
           echo "export_options=$EXPORT_OPTIONS_PATH" >> $GITHUB_OUTPUT
           echo "✅ Certificate and Provisioning Profile installed successfully."
