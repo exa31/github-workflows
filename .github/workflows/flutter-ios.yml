@@ -149,8 +149,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-deploy-ios:
+  build-ios:
+    name: Build iOS IPA
     runs-on: ${{ inputs.runs_on }}
+    outputs:
+      build_name: ${{ steps.versioning.outputs.build_name }}
+      build_number: ${{ steps.versioning.outputs.build_number }}
 
     steps:
       #################################################
@@ -420,10 +424,34 @@ jobs:
           retention-days: 30
 
       #################################################
-      # Deploy to TestFlight
+      # Clean up Keychain
+      #################################################
+      - name: Clean up Keychain and Provisioning Profiles
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null || true
+
+  deploy-testflight:
+    name: Deploy to Apple TestFlight
+    needs: build-ios
+    if: ${{ inputs.upload_to_testflight }}
+    runs-on: ${{ inputs.runs_on }}
+
+    steps:
+      #################################################
+      # Download IPA Artifact
+      #################################################
+      - name: Download IPA Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ needs.build-ios.outputs.build_name }}-${{ needs.build-ios.outputs.build_number }}-ipa
+          path: build/ios/ipa
+
+      #################################################
+      # Find Built IPA Path
       #################################################
       - name: Find Built IPA Path
-        if: ${{ inputs.upload_to_testflight }}
         id: find_ipa
         run: |
           IPA_FILE=$(find build/ios/ipa -name "*.ipa" -type f | head -n 1)
@@ -434,8 +462,10 @@ jobs:
           echo "ipa_path=$IPA_FILE" >> $GITHUB_OUTPUT
           echo "📦 Found IPA: $IPA_FILE"
 
+      #################################################
+      # Prepare App Store Connect Key
+      #################################################
       - name: Prepare App Store Connect Key
-        if: ${{ inputs.upload_to_testflight }}
         id: asc_key
         env:
           RAW_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
@@ -459,20 +489,14 @@ jobs:
           echo "EOF" >> $GITHUB_OUTPUT
           echo "configured=true" >> $GITHUB_OUTPUT
 
+      #################################################
+      # Deploy to TestFlight
+      #################################################
       - name: Deploy to TestFlight
-        if: ${{ inputs.upload_to_testflight && steps.asc_key.outputs.configured == 'true' }}
+        if: ${{ steps.asc_key.outputs.configured == 'true' }}
         uses: apple-actions/upload-testflight-build@v1
         with:
           app-path: ${{ steps.find_ipa.outputs.ipa_path }}
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ steps.asc_key.outputs.key }}
-
-      #################################################
-      # Clean up Keychain
-      #################################################
-      - name: Clean up Keychain and Provisioning Profiles
-        if: always()
-        run: |
-          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
-          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null || true

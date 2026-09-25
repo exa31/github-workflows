@@ -127,14 +127,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-deploy:
+  build:
+    name: Build & Push Docker Image
     runs-on: ubuntu-latest
+    outputs:
+      deploy_tag: ${{ steps.version.outputs.deploy_tag }}
+      version: ${{ steps.version.outputs.version }}
 
     steps:
       #################################################
       # Checkout
       #################################################
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -142,7 +145,6 @@ jobs:
       #################################################
       # Setup Node
       #################################################
-
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ inputs.node_version }}
@@ -150,7 +152,6 @@ jobs:
       #################################################
       # Semantic Release
       #################################################
-
       - name: Install Semantic Release
         run: |
           npm install -D \
@@ -169,7 +170,6 @@ jobs:
       #################################################
       # Get Version & SHA
       #################################################
-
       - name: Get Version and SHA
         id: version
         run: |
@@ -182,7 +182,6 @@ jobs:
       #################################################
       # Login GHCR
       #################################################
-
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -192,26 +191,27 @@ jobs:
       #################################################
       # Build & Push
       #################################################
-
       - uses: docker/build-push-action@v6
         with:
           context: ${{ inputs.docker_context }}
           file: ${{ inputs.dockerfile }}
-
           push: true
-
           tags: |
             ${{ inputs.image_name }}:${{ steps.version.outputs.deploy_tag }}
             ${{ inputs.image_name }}:${{ steps.version.outputs.version }}
             ${{ inputs.push_latest && format('{0}:latest', inputs.image_name) || '' }}
-
           build-args: |
             ${{ inputs.build_args }}
 
-      #################################################
-      # SSH
-      #################################################
+  deploy:
+    name: Deploy to Kubernetes
+    needs: build
+    runs-on: ubuntu-latest
 
+    steps:
+      #################################################
+      # SSH Agent
+      #################################################
       - uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_KEY }}
@@ -219,10 +219,8 @@ jobs:
       #################################################
       # Deploy
       #################################################
-
-      - name: Deploy
+      - name: Deploy to Kubernetes
         run: |
-
           ssh-keyscan \
             -p ${{ inputs.ssh_port }} \
             -H ${{ secrets.VPS_HOST }} \
@@ -236,7 +234,7 @@ jobs:
 
           kubectl set image deployment/${{ inputs.app_name }} \
             -n ${{ inputs.namespace }} \
-            ${{ inputs.app_name }}=${{ inputs.image_name }}:${{ steps.version.outputs.deploy_tag }}
+            ${{ inputs.app_name }}=${{ inputs.image_name }}:${{ needs.build.outputs.deploy_tag }}
 
           kubectl rollout status \
             deployment/${{ inputs.app_name }} \
