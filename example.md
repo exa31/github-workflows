@@ -8,6 +8,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
 jobs:
   deploy:
     uses: exa31/github-workflows/.github/workflows/backend.yml@main
@@ -30,6 +36,8 @@ jobs:
       VPS_HOST: ${{ secrets.VPS_HOST }}
 ```
 
+---
+
 ## Contoh Frontend (Lengkap)
 
 ```yaml
@@ -39,6 +47,12 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
 
 jobs:
   deploy:
@@ -63,6 +77,8 @@ jobs:
       VPS_HOST: ${{ secrets.VPS_HOST }}
 ```
 
+---
+
 ## Contoh Flutter Android (Lengkap)
 
 ```yaml
@@ -72,6 +88,12 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
 
 jobs:
   deploy-android:
@@ -93,6 +115,8 @@ jobs:
       PLAY_STORE_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
 ```
 
+---
+
 ## Contoh Flutter iOS (Lengkap)
 
 ```yaml
@@ -102,6 +126,12 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
 
 jobs:
   deploy-ios:
@@ -120,3 +150,68 @@ jobs:
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
 ```
 
+---
+
+## Contoh Extend: Menambahkan Job Test / Lint Sebelum Deploy
+
+Jika ingin menjalankan test/linter terlebih dahulu sebelum proses deploy:
+
+```yaml
+name: Test & Deploy Flutter iOS
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  # ==========================================
+  # 1. Job Test & Lint (Jalan di Ubuntu Cepat)
+  # ==========================================
+  test:
+    name: Run Analyzer & Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.x"
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Code Analysis
+        run: flutter analyze
+
+      - name: Run Unit & Widget Tests
+        run: flutter test
+
+  # ==========================================
+  # 2. Reusable Workflow (Hanya jalan jika test lolos)
+  # ==========================================
+  deploy-ios:
+    name: Build & Deploy iOS
+    needs: test   # 👈 Kunci: Menunggu job test sukses!
+    uses: exa31/github-workflows/.github/workflows/flutter-ios.yml@main
+    with:
+      app_name: cyber-mobile
+      flutter_version: "3.x"
+      upload_to_testflight: true
+      uses_non_exempt_encryption: false
+    secrets:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+```

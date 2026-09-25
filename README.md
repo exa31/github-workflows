@@ -1,8 +1,8 @@
 # GitHub Workflows
 
-Reusable workflows untuk deploy service ke Kubernetes.
+Reusable workflows untuk deploy service ke Kubernetes dan Mobile App Stores.
 
-Repo: `exa31/github-workflows`
+Repo: `exa31/github-workflows`  
 Branch: `main`
 
 ---
@@ -15,6 +15,20 @@ Branch: `main`
 | Frontend | `.github/workflows/frontend.yml` | Build Docker + deploy frontend ke K8s |
 | Flutter Android | `.github/workflows/flutter-android.yml` | Build APK/AAB + deploy ke Google Play Console |
 | Flutter iOS | `.github/workflows/flutter-ios.yml` | Build IPA + deploy ke Apple TestFlight / App Store |
+
+---
+
+## Permissions pada Caller Workflow
+
+Setiap workflow pemanggil **wajib menyertakan blok `permissions:`** di level root file `.yml` agar fitur seperti Semantic Release, GitHub Release, pembuatan Git Tag, dan update versi `pubspec.yaml` dapat berjalan tanpa error `403 Resource not accessible by integration`:
+
+```yaml
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+```
 
 ---
 
@@ -52,6 +66,12 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
 
 jobs:
   deploy:
@@ -112,6 +132,12 @@ on:
   push:
     branches:
       - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
 
 jobs:
   deploy:
@@ -180,6 +206,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
 jobs:
   deploy-android:
     uses: exa31/github-workflows/.github/workflows/flutter-android.yml@main
@@ -240,6 +272,12 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
 jobs:
   deploy-ios:
     uses: exa31/github-workflows/.github/workflows/flutter-ios.yml@main
@@ -247,6 +285,7 @@ jobs:
       app_name: cyber-mobile
       flutter_version: 3.x
       upload_to_testflight: true
+      uses_non_exempt_encryption: false
     secrets:
       APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
@@ -314,4 +353,3 @@ Buka **Settings > Secrets and variables > Actions** di repositori tujuan:
 - `APP_STORE_CONNECT_API_KEY_BASE64`
 - `APP_STORE_CONNECT_KEY_ID`
 - `APP_STORE_CONNECT_ISSUER_ID`
-
