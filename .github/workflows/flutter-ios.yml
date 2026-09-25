@@ -47,6 +47,11 @@ on:
         required: false
         default: true
         type: boolean
+      uses_non_exempt_encryption:
+        description: "Set ITSAppUsesNonExemptEncryption in Info.plist (false to automatically resolve TestFlight Missing Compliance)"
+        required: false
+        default: false
+        type: boolean
       runs_on:
         description: "Runner to use (macos-latest, macos-14, or self-hosted)"
         required: false
@@ -98,6 +103,11 @@ on:
         description: "Deploy to Apple TestFlight"
         required: false
         default: true
+        type: boolean
+      uses_non_exempt_encryption:
+        description: "Set ITSAppUsesNonExemptEncryption in Info.plist (false to automatically resolve TestFlight Missing Compliance)"
+        required: false
+        default: false
         type: boolean
       runs_on:
         description: "Runner to use (macos-latest, macos-14, or self-hosted)"
@@ -363,6 +373,21 @@ jobs:
             else
               echo "ℹ️ pubspec.yaml is already up-to-date (${BUILD_NAME}+${BUILD_NUMBER})."
             fi
+          fi
+
+      #################################################
+      # Configure iOS Export Compliance (Info.plist)
+      #################################################
+      - name: Configure iOS Export Compliance
+        run: |
+          if [ -f "ios/Runner/Info.plist" ]; then
+            echo "🔐 Configuring ITSAppUsesNonExemptEncryption in ios/Runner/Info.plist..."
+            if plutil -extract ITSAppUsesNonExemptEncryption raw ios/Runner/Info.plist >/dev/null 2>&1; then
+              plutil -replace ITSAppUsesNonExemptEncryption -bool ${{ inputs.uses_non_exempt_encryption }} ios/Runner/Info.plist
+            else
+              plutil -insert ITSAppUsesNonExemptEncryption -bool ${{ inputs.uses_non_exempt_encryption }} ios/Runner/Info.plist
+            fi
+            echo "✅ ITSAppUsesNonExemptEncryption set to ${{ inputs.uses_non_exempt_encryption }}"
           fi
 
       #################################################

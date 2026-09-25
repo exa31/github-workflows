@@ -216,6 +216,7 @@ Workflow ini berjalan di runner **macOS** (`macos-latest`), mengimpor Apple Dist
 | `build_number` | ❌ | - | Override integer Build Number. Default: `github.run_number` |
 | `build_args` | ❌ | `""` | Argumen tambahan `flutter build ipa` |
 | `upload_to_testflight` | ❌ | `true` | Upload ke TestFlight |
+| `uses_non_exempt_encryption` | ❌ | `false` | Set `ITSAppUsesNonExemptEncryption` di `Info.plist` (hilangkan warning Missing Compliance) |
 | `runs_on` | ❌ | `macos-latest` | Runner OS (`macos-latest`, `macos-14`, atau self-hosted) |
 
 ### Secrets

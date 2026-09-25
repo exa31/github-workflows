@@ -110,6 +110,7 @@ jobs:
       app_name: cyber-mobile
       flutter_version: "3.x"
       upload_to_testflight: true
+      uses_non_exempt_encryption: false
     secrets:
       APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
