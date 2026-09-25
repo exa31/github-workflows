@@ -203,6 +203,19 @@ jobs:
           build-args: |
             ${{ inputs.build_args }}
 
+      #################################################
+      # Docker Build Step Summary
+      #################################################
+      - name: Generate Frontend Docker Build Summary
+        if: always()
+        run: |
+          echo "## 🎨 Frontend Docker Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Tag** | \`${{ steps.version.outputs.deploy_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Image Target** | \`${{ inputs.image_name }}:${{ steps.version.outputs.deploy_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+
   deploy:
     name: Deploy to Kubernetes
     needs: build
@@ -245,3 +258,17 @@ jobs:
             -n ${{ inputs.namespace }}
 
           EOF
+
+      #################################################
+      # Kubernetes Deploy Step Summary
+      #################################################
+      - name: Generate Kubernetes Deploy Summary
+        if: always()
+        run: |
+          echo "## ☸️ Kubernetes Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Status / Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Namespace** | \`${{ inputs.namespace }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Deployed Image** | \`${{ inputs.image_name }}:${{ needs.build.outputs.deploy_tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ✅ **Rollout Completed Successfully** |" >> $GITHUB_STEP_SUMMARY

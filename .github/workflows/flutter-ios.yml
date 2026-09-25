@@ -424,6 +424,21 @@ jobs:
           retention-days: 30
 
       #################################################
+      # Build Step Summary
+      #################################################
+      - name: Generate Build Summary
+        if: always()
+        run: |
+          echo "## 🔨 iOS Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version Name** | \`${{ steps.versioning.outputs.build_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Number** | \`${{ steps.versioning.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Export Compliance** | \`ITSAppUsesNonExemptEncryption=${{ inputs.uses_non_exempt_encryption }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Flutter Version** | \`${{ inputs.flutter_version }}\` |" >> $GITHUB_STEP_SUMMARY
+
+      #################################################
       # Clean up Keychain
       #################################################
       - name: Clean up Keychain and Provisioning Profiles
@@ -500,3 +515,23 @@ jobs:
           issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ steps.asc_key.outputs.key }}
+
+      #################################################
+      # Deployment Step Summary
+      #################################################
+      - name: Generate TestFlight Deploy Summary
+        if: always()
+        run: |
+          echo "## 🍏 TestFlight Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Status / Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version & Build** | \`${{ needs.build-ios.outputs.build_name }}+${{ needs.build-ios.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.asc_key.outputs.configured }}" == "true" ]; then
+            echo "| **Upload Status** | ✅ **Berhasil Terupload ke TestFlight** |" >> $GITHUB_STEP_SUMMARY
+            echo "| **App Store Console** | [Buka TestFlight Console](https://appstoreconnect.apple.com) |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> ⏱️ **Info Apple Processing:** Setelah upload berhasil, Apple membutuhkan waktu **5 - 15 menit** untuk memproses binary sebelum build muncul di daftar aktif TestFlight." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Upload Status** | ⚠️ **Dilewati (Skipped)** - *Secrets API Key App Store Connect belum lengkap* |" >> $GITHUB_STEP_SUMMARY
+          fi

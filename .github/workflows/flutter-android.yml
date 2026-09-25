@@ -403,6 +403,21 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      #################################################
+      # Build Step Summary
+      #################################################
+      - name: Generate Android Build Summary
+        if: always()
+        run: |
+          echo "## 🤖 Android Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version Name** | \`${{ steps.versioning.outputs.build_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version Code** | \`${{ steps.versioning.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Type** | \`${{ inputs.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Flutter Version** | \`${{ inputs.flutter_version }}\` |" >> $GITHUB_STEP_SUMMARY
+
   deploy-play-store:
     name: Deploy to Google Play Console
     needs: build-android
@@ -455,3 +470,23 @@ jobs:
           releaseFiles: build/app/outputs/bundle/release/*.aab
           track: ${{ inputs.track }}
           status: ${{ inputs.status }}
+
+      #################################################
+      # Play Store Deployment Step Summary
+      #################################################
+      - name: Generate Play Store Deploy Summary
+        if: always()
+        run: |
+          echo "## 🛍️ Google Play Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Status / Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Package Name** | \`${{ inputs.package_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version** | \`${{ needs.build-android.outputs.build_name }}+${{ needs.build-android.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Track & Status** | \`${{ inputs.track }}\` (${{ inputs.status }}) |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.play_auth.outputs.configured }}" == "true" ]; then
+            echo "| **Deploy Status** | ✅ **Berhasil Terupload ke Play Console** |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Play Console** | [Buka Google Play Console](https://play.google.com/console) |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Deploy Status** | ⚠️ **Dilewati (Skipped)** - *Service Account JSON belum dikonfigurasi* |" >> $GITHUB_STEP_SUMMARY
+          fi
