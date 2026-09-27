@@ -175,7 +175,8 @@ Workflow ini otomatis melakukan setup Java, Flutter, decode keystore `.jks`, gen
 | `app_name` | ✅ | - | Nama aplikasi mobile (misal: `cyber-mobile`) |
 | `flutter_version` | ❌ | `3.x` | Versi Flutter SDK (`3.x`, `3.24.x`, atau `stable`) |
 | `java_version` | ❌ | `17` | Versi Java JDK (`17` atau `21`) |
-| `build_type` | ❌ | `appbundle` | Tipe build: `appbundle`, `apk`, atau `both` |
+| `build_type` | ❌ | `both` | Tipe build: `both` (AAB + APK), `apk`, atau `appbundle` |
+| `attach_to_release` | ❌ | `true` | Otomatis upload binary (APK & AAB) ke GitHub Releases untuk direct download |
 | `enable_semantic_release` | ❌ | `true` | Otomatis hitung semver, buat Git Tag, dan GitHub Release |
 | `update_pubspec` | ❌ | `true` | Otomatis update baris versi di `pubspec.yaml` & push commit |
 | `build_name` | ❌ | - | Override manual versi (misal: `1.0.0`) jika tidak ingin auto |
@@ -247,6 +248,7 @@ Workflow ini berjalan di runner **macOS** (`macos-latest`), mengimpor Apple Dist
 | `build_name` | ❌ | - | Override manual versi (misal: `1.0.0`) jika tidak ingin auto |
 | `build_number` | ❌ | - | Override integer Build Number. Default: `github.run_number` |
 | `build_args` | ❌ | `""` | Argumen tambahan `flutter build ipa` |
+| `attach_to_release` | ❌ | `true` | Otomatis upload file IPA ke GitHub Releases |
 | `upload_to_testflight` | ❌ | `true` | Upload ke TestFlight |
 | `uses_non_exempt_encryption` | ❌ | `false` | Set `ITSAppUsesNonExemptEncryption` di `Info.plist` (hilangkan warning Missing Compliance) |
 | `runs_on` | ❌ | `macos-latest` | Runner OS (`macos-latest`, `macos-14`, atau self-hosted) |

@@ -102,7 +102,7 @@ jobs:
       app_name: cyber-mobile
       flutter_version: "3.x"
       java_version: "17"
-      build_type: "appbundle"
+      build_type: "both" # builds .aab (Play Store) AND .apk (Direct Download di GitHub Releases)
       package_name: "com.exa.cybermobile"
       track: "internal"
       status: "completed"

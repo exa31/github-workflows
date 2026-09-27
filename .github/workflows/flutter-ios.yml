@@ -47,6 +47,11 @@ on:
         required: false
         default: true
         type: boolean
+      attach_to_release:
+        description: "Attach IPA binary to GitHub Release"
+        required: false
+        default: true
+        type: boolean
       uses_non_exempt_encryption:
         description: "Set ITSAppUsesNonExemptEncryption in Info.plist (false to automatically resolve TestFlight Missing Compliance)"
         required: false
@@ -101,6 +106,11 @@ on:
         type: string
       upload_to_testflight:
         description: "Deploy to Apple TestFlight"
+        required: false
+        default: true
+        type: boolean
+      attach_to_release:
+        description: "Attach IPA binary to GitHub Release"
         required: false
         default: true
         type: boolean
@@ -424,6 +434,39 @@ jobs:
           retention-days: 30
 
       #################################################
+      # Attach IPA to GitHub Release
+      #################################################
+      - name: Attach IPA to GitHub Release
+        if: ${{ inputs.attach_to_release }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.versioning.outputs.build_name }}"
+          echo "🏷️ Target Release Tag: $TAG"
+
+          IPA_FILE=$(find build/ios/ipa -name "*.ipa" 2>/dev/null | head -n 1)
+          if [ -n "$IPA_FILE" ] && [ -f "$IPA_FILE" ]; then
+            NAMED_IPA="build/ios/ipa/${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}.ipa"
+            if [ "$IPA_FILE" != "$NAMED_IPA" ]; then
+              cp "$IPA_FILE" "$NAMED_IPA"
+            fi
+
+            echo "📦 Menyiapkan upload file IPA: $NAMED_IPA"
+
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "✅ GitHub Release $TAG ditemukan. Mengupload IPA..."
+              gh release upload "$TAG" "$NAMED_IPA" --clobber
+            else
+              echo "ℹ️ Release $TAG belum ada di GitHub. Membuat release baru..."
+              gh release create "$TAG" "$NAMED_IPA" \
+                --title "${{ inputs.app_name }} $TAG" \
+                --notes "Automated release build for ${{ inputs.app_name }} $TAG" || true
+            fi
+          else
+            echo "ℹ️ Tidak ada file IPA yang ditemukan untuk di-upload."
+          fi
+
+      #################################################
       # Build Step Summary
       #################################################
       - name: Generate Build Summary
@@ -437,6 +480,7 @@ jobs:
           echo "| **Build Number** | \`${{ steps.versioning.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Export Compliance** | \`ITSAppUsesNonExemptEncryption=${{ inputs.uses_non_exempt_encryption }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Flutter Version** | \`${{ inputs.flutter_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Direct Download IPA** | [📦 Download IPA via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.versioning.outputs.build_name }}) |" >> $GITHUB_STEP_SUMMARY
 
       #################################################
       # Clean up Keychain

@@ -25,8 +25,13 @@ on:
       build_type:
         description: "Build Output: appbundle, apk, or both"
         required: false
-        default: "appbundle"
+        default: "both"
         type: string
+      attach_to_release:
+        description: "Attach APK and AAB binaries to GitHub Release"
+        required: false
+        default: true
+        type: boolean
       enable_semantic_release:
         description: "Run Semantic Release for automated version tagging and GitHub release"
         required: false
@@ -97,8 +102,13 @@ on:
       build_type:
         description: "Build Output: appbundle, apk, or both"
         required: false
-        default: "appbundle"
+        default: "both"
         type: string
+      attach_to_release:
+        description: "Attach APK and AAB binaries to GitHub Release"
+        required: false
+        default: true
+        type: boolean
       enable_semantic_release:
         description: "Run Semantic Release for automated version tagging and GitHub release"
         required: false
@@ -404,6 +414,65 @@ jobs:
           retention-days: 30
 
       #################################################
+      # Attach APK & AAB to GitHub Release
+      #################################################
+      - name: Attach Assets to GitHub Release
+        if: ${{ inputs.attach_to_release }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.versioning.outputs.build_name }}"
+          echo "🏷️ Target Release Tag: $TAG"
+
+          FILES_TO_UPLOAD=()
+
+          # 1. Cari APK dan buat salinan dengan nama yang rapi
+          if [ -d "build/app/outputs/flutter-apk" ]; then
+            for f in build/app/outputs/flutter-apk/*.apk; do
+              if [ -f "$f" ]; then
+                NEW_APK="build/app/outputs/flutter-apk/${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}.apk"
+                if [ "$f" != "$NEW_APK" ]; then
+                  cp "$f" "$NEW_APK"
+                fi
+                FILES_TO_UPLOAD+=("$NEW_APK")
+                break
+              fi
+            done
+          fi
+
+          # 2. Cari AAB dan buat salinan dengan nama yang rapi
+          if [ -d "build/app/outputs/bundle/release" ]; then
+            for f in build/app/outputs/bundle/release/*.aab; do
+              if [ -f "$f" ]; then
+                NEW_AAB="build/app/outputs/bundle/release/${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}.aab"
+                if [ "$f" != "$NEW_AAB" ]; then
+                  cp "$f" "$NEW_AAB"
+                fi
+                FILES_TO_UPLOAD+=("$NEW_AAB")
+                break
+              fi
+            done
+          fi
+
+          if [ ${#FILES_TO_UPLOAD[@]} -eq 0 ]; then
+            echo "ℹ️ Tidak ada file APK atau AAB yang ditemukan untuk di-upload."
+            exit 0
+          fi
+
+          echo "📦 Menyiapkan upload file: ${FILES_TO_UPLOAD[*]}"
+
+          # Cek apakah release tag sudah dibuat oleh semantic-release di awal
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "✅ GitHub Release $TAG ditemukan. Mengupload file aset..."
+            gh release upload "$TAG" "${FILES_TO_UPLOAD[@]}" --clobber
+          else
+            echo "ℹ️ Release $TAG belum ada di GitHub. Membuat release baru dengan tag $TAG..."
+            gh release create "$TAG" "${FILES_TO_UPLOAD[@]}" \
+              --title "${{ inputs.app_name }} $TAG" \
+              --notes "Automated release build for ${{ inputs.app_name }} $TAG" || true
+          fi
+
+      #################################################
       # Build Step Summary
       #################################################
       - name: Generate Android Build Summary
@@ -417,6 +486,9 @@ jobs:
           echo "| **Version Code** | \`${{ steps.versioning.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Build Type** | \`${{ inputs.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Flutter Version** | \`${{ inputs.flutter_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.build_type }}" == "apk" ] || [ "${{ inputs.build_type }}" == "both" ]; then
+            echo "| **Direct Download APK** | [📱 Download APK via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.versioning.outputs.build_name }}) |" >> $GITHUB_STEP_SUMMARY
+          fi
 
   deploy-play-store:
     name: Deploy to Google Play Console
