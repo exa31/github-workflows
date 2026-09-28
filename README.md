@@ -9,12 +9,12 @@ Branch: `main`
 
 ## Daftar Workflow
 
-| Workflow | File | Deskripsi |
-|---|---|---|
-| Backend | `.github/workflows/backend.yml` | Build Docker + deploy backend ke K8s |
-| Frontend | `.github/workflows/frontend.yml` | Build Docker + deploy frontend ke K8s |
-| Flutter Android | `.github/workflows/flutter-android.yml` | Build APK/AAB + deploy ke Google Play Console |
-| Flutter iOS | `.github/workflows/flutter-ios.yml` | Build IPA + deploy ke Apple TestFlight / App Store |
+| Workflow        | File                                    | Deskripsi                                          |
+| -----------------| -----------------------------------------| ----------------------------------------------------|
+| Backend         | `.github/workflows/backend.yml`         | Build Docker + deploy backend ke K8s               |
+| Frontend        | `.github/workflows/frontend.yml`        | Build Docker + deploy frontend ke K8s              |
+| Flutter Android | `.github/workflows/flutter-android.yml` | Build APK/AAB + deploy ke Google Play Console      |
+| Flutter iOS     | `.github/workflows/flutter-ios.yml`     | Build IPA + deploy ke Apple TestFlight / App Store |
 
 ---
 
@@ -296,6 +296,15 @@ jobs:
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
 ```
+
+---
+
+## Panduan Lengkap Setup Secrets
+
+> 📖 **Dokumentasi Lengkap Step-by-Step:**  
+> - 🔐 **[SECRETS_SETUP_GUIDE.md](./SECRETS_SETUP_GUIDE.md)** — Panduan terpadu untuk semua platform (Android, iOS, Backend, Frontend).
+> - 🤖 **[SECRETS_SETUP_ANDROID.md](./SECRETS_SETUP_ANDROID.md)** — Tutorial lengkap Android: pembuatan Keystore `keytool`, signing Gradle, Google Play Console Service Account JSON, dan Test Track Play Store.
+> - 🍏 **[SECRETS_SETUP_IOS.md](./SECRETS_SETUP_IOS.md)** — Tutorial lengkap iOS: CSR Mac, Sertifikat Distribusi `.p12`, Provisioning Profile `.mobileprovision`, App Store Connect API Key `.p8`, dan TestFlight.
 
 ---
 
