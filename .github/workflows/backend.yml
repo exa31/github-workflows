@@ -44,6 +44,11 @@ on:
         required: false
         default: true
         type: boolean
+      tag_prefix:
+        description: "Git Tag Prefix for Monorepo (e.g. \'backend-\')"
+        required: false
+        default: ""
+        type: string
 
   workflow_call:
     inputs:
@@ -96,6 +101,12 @@ on:
         required: false
         default: true
         type: boolean
+
+      tag_prefix:
+        description: "Git Tag Prefix for Monorepo (e.g. \'backend-\')"
+        required: false
+        default: ""
+        type: string
 
     secrets:
       GHCR_TOKEN:
@@ -158,7 +169,12 @@ jobs:
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: npx semantic-release
+        run: |
+          if [ -n "${{ inputs.tag_prefix }}" ]; then
+            npx semantic-release --tag-format "${{ inputs.tag_prefix }}v\${version}"
+          else
+            npx semantic-release
+          fi
 
       #################################################
       # Read Latest Tag & SHA
@@ -166,7 +182,11 @@ jobs:
       - name: Read Version and SHA
         id: version
         run: |
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          if [ -n "${{ inputs.tag_prefix }}" ]; then
+            VERSION=$(git describe --tags --match "${{ inputs.tag_prefix }}v*" --abbrev=0 2>/dev/null || echo "${{ inputs.tag_prefix }}v0.0.0")
+          else
+            VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          fi
           SHORT_SHA=$(git rev-parse --short HEAD)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "sha=$SHORT_SHA" >> $GITHUB_OUTPUT
