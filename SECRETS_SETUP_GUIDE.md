@@ -17,9 +17,9 @@ Untuk tutorial langkah demi langkah yang sangat mendalam beserta tangkapan layar
 
 ## 📑 Ringkasan Semua Secrets Berdasarkan Kategori
 
-### 1. 🤖 Mobile Android (Flutter)
+### 1. 🤖 Mobile Android (Flutter & Kotlin Jetpack Compose)
 
-Workflow: [`flutter-android.yml`](./.github/workflows/flutter-android.yml)
+Workflows: [`flutter-android.yml`](./.github/workflows/flutter-android.yml) dan [`compose-android.yml`](./.github/workflows/compose-android.yml)
 
 | Nama Secret | Wajib? | Format | Deskripsi |
 |---|:---:|---|---|
@@ -32,9 +32,9 @@ Workflow: [`flutter-android.yml`](./.github/workflows/flutter-android.yml)
 
 ---
 
-### 2. 🍏 Mobile iOS (Flutter)
+### 2. 🍏 Mobile iOS (Flutter & Swift SwiftUI)
 
-Workflow: [`flutter-ios.yml`](./.github/workflows/flutter-ios.yml)
+Workflows: [`flutter-ios.yml`](./.github/workflows/flutter-ios.yml) dan [`swiftui-ios.yml`](./.github/workflows/swiftui-ios.yml)
 
 | Nama Secret | Wajib? | Format | Deskripsi |
 |---|:---:|---|---|

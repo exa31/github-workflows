@@ -12,11 +12,14 @@ const GH_CMD = fs.existsSync("C:\\Program Files\\GitHub CLI\\gh.exe")
 // =========================================================================
 
 // Daftar repo yang membutuhkan SECRETS (Misal: Backend / App yang butuh deploy ke server)
-const REPOSITORIES_SECRETS = ["https://github.com/exa-dev-coffe/worker-asynq"];
+const REPOSITORIES_SECRETS = [
+  "https://github.com/exa31/task-management",
+];
 
 // Daftar repo yang membutuhkan VARIABLES (Misal: Frontend yang butuh setting tema/API URL)
 const REPOSITORIES_VARS = [
   // "https://github.com/exa31/fe-chat-app"
+  "https://github.com/exa31/task-management"
 ];
 
 // =========================================================================
@@ -43,6 +46,10 @@ const VARS_TO_SYNC = [
   // "VITE_WS_URL",
   // "VITE_APP_API_URL",
   // "VITE_GOOGLE_CLIENT_ID",
+  "VITE_ENABLE_MOCKS",
+  "VITE_GOOGLE_CLIENT_ID",
+  "VITE_APPLE_CLIENT_ID",
+
 ];
 
 // =========================================================================

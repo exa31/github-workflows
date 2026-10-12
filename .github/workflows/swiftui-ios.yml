@@ -1,0 +1,665 @@
+name: Swift iOS (SwiftUI) Build & TestFlight Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      env_content:
+        description: "Content to write to .env file (e.g. key=value lines)"
+        required: false
+        default: ""
+        type: string
+      app_name:
+        description: "Application Name"
+        required: true
+        type: string
+      workspace_or_project:
+        description: "Path to .xcworkspace or .xcodeproj (empty for auto-detect)"
+        required: false
+        default: ""
+        type: string
+      scheme:
+        description: "Xcode Scheme Name (empty for auto-detect or app_name)"
+        required: false
+        default: ""
+        type: string
+      configuration:
+        description: "Xcode Build Configuration (Release / Debug)"
+        required: false
+        default: "Release"
+        type: string
+      runs_on:
+        description: "macOS Runner (macos-latest, macos-14, or macos-15)"
+        required: false
+        default: "macos-latest"
+        type: string
+      enable_semantic_release:
+        description: "Run Semantic Release for automated version tagging and GitHub release"
+        required: false
+        default: true
+        type: boolean
+      update_project_version:
+        description: "Auto-bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in project.pbxproj"
+        required: false
+        default: true
+        type: boolean
+      build_name:
+        description: "App Version Name override (e.g. 1.0.0). Defaults to semantic release tag"
+        required: false
+        default: ""
+        type: string
+      build_number:
+        description: "App Build Number override (integer). Defaults to github.run_number"
+        required: false
+        default: ""
+        type: string
+      build_args:
+        description: "Additional xcodebuild arguments (e.g. -skipPackagePluginValidation)"
+        required: false
+        default: ""
+        type: string
+      upload_to_testflight:
+        description: "Deploy to Apple TestFlight"
+        required: false
+        default: true
+        type: boolean
+      attach_to_release:
+        description: "Attach IPA binary to GitHub Release"
+        required: false
+        default: true
+        type: boolean
+      uses_non_exempt_encryption:
+        description: "Set ITSAppUsesNonExemptEncryption in Info.plist (false to automatically resolve TestFlight Missing Compliance)"
+        required: false
+        default: false
+        type: boolean
+
+  workflow_call:
+    inputs:
+      env_content:
+        description: "Content to write to .env file (e.g. key=value lines)"
+        required: false
+        default: ""
+        type: string
+      app_name:
+        description: "Application Name"
+        required: true
+        type: string
+      workspace_or_project:
+        description: "Path to .xcworkspace or .xcodeproj (empty for auto-detect)"
+        required: false
+        default: ""
+        type: string
+      scheme:
+        description: "Xcode Scheme Name (empty for auto-detect or app_name)"
+        required: false
+        default: ""
+        type: string
+      configuration:
+        description: "Xcode Build Configuration (Release / Debug)"
+        required: false
+        default: "Release"
+        type: string
+      runs_on:
+        description: "macOS Runner (macos-latest, macos-14, or macos-15)"
+        required: false
+        default: "macos-latest"
+        type: string
+      enable_semantic_release:
+        description: "Run Semantic Release for automated version tagging and GitHub release"
+        required: false
+        default: true
+        type: boolean
+      update_project_version:
+        description: "Auto-bump MARKETING_VERSION and CURRENT_PROJECT_VERSION in project.pbxproj"
+        required: false
+        default: true
+        type: boolean
+      build_name:
+        description: "App Version Name override (e.g. 1.0.0). Defaults to semantic release tag"
+        required: false
+        default: ""
+        type: string
+      build_number:
+        description: "App Build Number override (integer). Defaults to github.run_number"
+        required: false
+        default: ""
+        type: string
+      build_args:
+        description: "Additional xcodebuild arguments (e.g. -skipPackagePluginValidation)"
+        required: false
+        default: ""
+        type: string
+      upload_to_testflight:
+        description: "Deploy to Apple TestFlight"
+        required: false
+        default: true
+        type: boolean
+      attach_to_release:
+        description: "Attach IPA binary to GitHub Release"
+        required: false
+        default: true
+        type: boolean
+      uses_non_exempt_encryption:
+        description: "Set ITSAppUsesNonExemptEncryption in Info.plist (false to automatically resolve TestFlight Missing Compliance)"
+        required: false
+        default: false
+        type: boolean
+
+    secrets:
+      ENV_FILE:
+        description: "Encrypted .env content from GitHub Secrets"
+        required: false
+      APPLE_CERTIFICATE_BASE64:
+        description: "Apple Distribution Certificate (.p12) base64 encoded"
+        required: true
+      APPLE_CERTIFICATE_PASSWORD:
+        description: "Password for the .p12 certificate"
+        required: true
+      APPLE_PROVISIONING_PROFILE_BASE64:
+        description: "Apple Provisioning Profile (.mobileprovision) base64 encoded"
+        required: true
+      APP_STORE_CONNECT_API_KEY_BASE64:
+        description: "App Store Connect API Key (.p8) in base64 or plain text"
+        required: false
+      APP_STORE_CONNECT_KEY_ID:
+        description: "App Store Connect API Key ID (10 characters)"
+        required: false
+      APP_STORE_CONNECT_ISSUER_ID:
+        description: "App Store Connect Issuer ID (UUID)"
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: deploy-ios-swiftui-${{ inputs.app_name }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: Build iOS SwiftUI IPA
+    runs-on: ${{ inputs.runs_on }}
+    outputs:
+      build_name: ${{ steps.versioning.outputs.build_name }}
+      build_number: ${{ steps.versioning.outputs.build_number }}
+
+    steps:
+      #################################################
+      # Checkout Repository
+      #################################################
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      #################################################
+      # Setup Node (Semantic Release)
+      #################################################
+      - name: Setup Node (Semantic Release)
+        if: ${{ inputs.enable_semantic_release }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      #################################################
+      # Install Semantic Release
+      #################################################
+      - name: Install Semantic Release
+        if: ${{ inputs.enable_semantic_release }}
+        run: |
+          npm install -D \
+            semantic-release \
+            @semantic-release/changelog \
+            @semantic-release/git \
+            @semantic-release/github \
+            @semantic-release/commit-analyzer \
+            @semantic-release/release-notes-generator
+
+      #################################################
+      # Run Semantic Release
+      #################################################
+      - name: Run Semantic Release
+        if: ${{ inputs.enable_semantic_release }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: npx semantic-release || echo "Semantic release completed or skipped without new version."
+
+      #################################################
+      # Setup Environment Configuration (.env)
+      #################################################
+      - name: Setup Environment Configuration (.env)
+        env:
+          ENV_CONTENT: ${{ inputs.env_content }}
+          SECRET_ENV_CONTENT: ${{ secrets.ENV_FILE }}
+        run: |
+          if [ -n "$SECRET_ENV_CONTENT" ]; then
+            echo "📄 Writing .env from secret ENV_FILE..."
+            echo "$SECRET_ENV_CONTENT" > .env
+          elif [ -n "$ENV_CONTENT" ]; then
+            echo "📄 Writing .env from inputs.env_content..."
+            echo "$ENV_CONTENT" > .env
+          elif [ -f .env.example ]; then
+            echo "📄 Writing .env from .env.example template..."
+            cp .env.example .env
+          else
+            echo "📄 Creating empty .env placeholder..."
+            touch .env
+          fi
+
+      #################################################
+      # Setup Apple Certificate and Keychain
+      #################################################
+      - name: Install Apple Certificate and Provisioning Profile
+        id: ios_signing
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: "ci-build-keychain-temporary-pass"
+        run: |
+          if [ -z "$BUILD_CERTIFICATE_BASE64" ] || [ -z "$BUILD_PROVISION_PROFILE_BASE64" ]; then
+            echo "⚠️ Apple Certificate or Provisioning Profile secrets are not provided."
+            exit 1
+          fi
+
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # Decode certificate and provisioning profile
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
+
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate to keychain
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" 2>/dev/null || true
+          security default-keychain -s "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | tr -d '"')
+
+          # Install provisioning profile with UUID filename
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          PP_UUID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract UUID raw - 2>/dev/null || echo "profile")
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/${PP_UUID}.mobileprovision
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+
+          # Extract Team ID, App ID (Bundle Identifier), and Profile Name
+          TEAM_ID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract TeamIdentifier.0 raw - 2>/dev/null || echo "")
+          APP_ID=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract Entitlements.application-identifier raw - 2>/dev/null | sed "s/^${TEAM_ID}\.//" || echo "")
+          PROFILE_NAME=$(security cms -D -i "$PP_PATH" 2>/dev/null | plutil -extract Name raw - 2>/dev/null || echo "")
+
+          echo "🔑 Extracted Team ID: $TEAM_ID"
+          echo "🔑 Extracted Bundle ID: $APP_ID"
+          echo "🔑 Extracted Profile Name: $PROFILE_NAME"
+
+          # Create ExportOptions.plist using plistlib
+          EXPORT_OPTIONS_PATH=$RUNNER_TEMP/ExportOptions.plist
+          python3 -c "import plistlib, sys; plistlib.dump({'method': 'app-store', 'signingStyle': 'manual', 'teamID': sys.argv[2], 'signingCertificate': 'Apple Distribution', 'provisioningProfiles': {sys.argv[3]: sys.argv[4]}, 'destination': 'export', 'manageAppVersionAndBuildNumber': False}, open(sys.argv[1], 'wb'))" "$EXPORT_OPTIONS_PATH" "$TEAM_ID" "$APP_ID" "$PROFILE_NAME"
+
+          echo "export_options=$EXPORT_OPTIONS_PATH" >> $GITHUB_OUTPUT
+          echo "team_id=$TEAM_ID" >> $GITHUB_OUTPUT
+          echo "bundle_id=$APP_ID" >> $GITHUB_OUTPUT
+          echo "profile_name=$PROFILE_NAME" >> $GITHUB_OUTPUT
+          echo "✅ Certificate and Provisioning Profile installed successfully."
+
+      #################################################
+      # Detect Xcode Project / Workspace & Scheme
+      #################################################
+      - name: Resolve Xcode Project and Scheme
+        id: xcode_resolve
+        run: |
+          TARGET="${{ inputs.workspace_or_project }}"
+          BUILD_FLAG=""
+
+          if [ -n "$TARGET" ]; then
+            if [[ "$TARGET" == *.xcworkspace ]]; then
+              BUILD_FLAG="-workspace $TARGET"
+            else
+              BUILD_FLAG="-project $TARGET"
+            fi
+          else
+            # Deteksi otomatis: utamakan .xcworkspace jika ada
+            WS=$(find . -maxdepth 2 -name "*.xcworkspace" ! -path "*.xcodeproj/*" 2>/dev/null | head -n 1)
+            if [ -n "$WS" ]; then
+              BUILD_FLAG="-workspace $WS"
+              TARGET="$WS"
+              echo "🎯 Auto-detected Workspace: $WS"
+            else
+              PROJ=$(find . -maxdepth 2 -name "*.xcodeproj" 2>/dev/null | head -n 1)
+              if [ -n "$PROJ" ]; then
+                BUILD_FLAG="-project $PROJ"
+                TARGET="$PROJ"
+                echo "🎯 Auto-detected Project: $PROJ"
+              else
+                echo "❌ No .xcworkspace or .xcodeproj found!"
+                exit 1
+              fi
+            fi
+          fi
+
+          # Deteksi Scheme
+          SCHEME="${{ inputs.scheme }}"
+          if [ -z "$SCHEME" ]; then
+            SCHEMES_LIST=$(xcodebuild $BUILD_FLAG -list -json 2>/dev/null | grep -A 20 '"schemes"' | tr -d '", []' | grep -v 'schemes' || echo "")
+            # Cari yang match app_name atau ambil scheme pertama
+            FIRST_SCHEME=$(echo "$SCHEMES_LIST" | head -n 1 | xargs)
+            if [ -n "$FIRST_SCHEME" ]; then
+              SCHEME="$FIRST_SCHEME"
+            else
+              SCHEME="${{ inputs.app_name }}"
+            fi
+            echo "🎯 Auto-detected Scheme: $SCHEME"
+          fi
+
+          echo "build_flag=$BUILD_FLAG" >> $GITHUB_OUTPUT
+          echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
+          echo "target_path=$TARGET" >> $GITHUB_OUTPUT
+
+      #################################################
+      # Resolve SPM & CocoaPods Dependencies
+      #################################################
+      - name: Resolve Dependencies (SPM & CocoaPods)
+        run: |
+          BUILD_FLAG="${{ steps.xcode_resolve.outputs.build_flag }}"
+          SCHEME="${{ steps.xcode_resolve.outputs.scheme }}"
+
+          # 1. CocoaPods jika ada Podfile
+          if [ -f "Podfile" ]; then
+            echo "📦 Running pod install..."
+            pod install --repo-update || pod install
+          fi
+
+          # 2. SPM package dependencies
+          echo "📦 Resolving Swift Package Manager dependencies..."
+          xcodebuild -resolvePackageDependencies $BUILD_FLAG -scheme "$SCHEME" 2>/dev/null || true
+
+      #################################################
+      # Determine Version & Build Number
+      #################################################
+      - name: Calculate Version and Build Number
+        id: versioning
+        run: |
+          git fetch --tags --force 2>/dev/null || true
+
+          # 1. Version Name (Semver)
+          if [ -n "${{ inputs.build_name }}" ]; then
+            BUILD_NAME="${{ inputs.build_name }}"
+          else
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+            if [ -n "$LATEST_TAG" ]; then
+              BUILD_NAME="${LATEST_TAG#v}"
+            else
+              BUILD_NAME="1.0.0"
+            fi
+          fi
+
+          # 2. Version Code / Build Number (Integer)
+          if [ -n "${{ inputs.build_number }}" ]; then
+            BUILD_NUMBER="${{ inputs.build_number }}"
+          else
+            BUILD_NUMBER="${{ github.run_number }}"
+          fi
+
+          echo "build_name=$BUILD_NAME" >> $GITHUB_OUTPUT
+          echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
+          echo "🚀 Build Name: $BUILD_NAME, Build Number: $BUILD_NUMBER"
+
+      #################################################
+      # Auto-bump Xcode Project Version & Commit
+      #################################################
+      - name: Update Xcode Project Version and Commit
+        if: ${{ inputs.update_project_version }}
+        env:
+          BUILD_NAME: ${{ steps.versioning.outputs.build_name }}
+          BUILD_NUMBER: ${{ steps.versioning.outputs.build_number }}
+        run: |
+          # Cari semua file project.pbxproj
+          PBX_FILES=$(find . -name "project.pbxproj" 2>/dev/null)
+          UPDATED=false
+
+          for pbx in $PBX_FILES; do
+            echo "📝 Updating MARKETING_VERSION and CURRENT_PROJECT_VERSION in $pbx..."
+            sed -i '' -E "s/MARKETING_VERSION = [^;]+;/MARKETING_VERSION = ${BUILD_NAME};/g" "$pbx"
+            sed -i '' -E "s/CURRENT_PROJECT_VERSION = [^;]+;/CURRENT_PROJECT_VERSION = ${BUILD_NUMBER};/g" "$pbx"
+            UPDATED=true
+          done
+
+          if [ "$UPDATED" = true ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+
+            MODIFIED_PBX=$(git status --porcelain | grep "project\.pbxproj" | awk '{print $2}' || true)
+            if [ -n "$MODIFIED_PBX" ]; then
+              echo "📝 Committing updated Xcode project version: $MODIFIED_PBX"
+              git add $MODIFIED_PBX
+              git commit -m "chore(release): bump iOS version to ${BUILD_NAME} (${BUILD_NUMBER}) [skip ci]"
+              
+              BRANCH_NAME="${{ github.ref_name }}"
+              if [ -n "$BRANCH_NAME" ]; then
+                git pull --rebase origin "$BRANCH_NAME" 2>/dev/null || true
+                git push origin HEAD:"$BRANCH_NAME" || echo "⚠️ Could not push to $BRANCH_NAME (branch may be protected), continuing build."
+              fi
+            else
+              echo "ℹ️ project.pbxproj is already up-to-date (${BUILD_NAME} / ${BUILD_NUMBER})."
+            fi
+          fi
+
+      #################################################
+      # Configure iOS Export Compliance (Info.plist)
+      #################################################
+      - name: Configure iOS Export Compliance
+        run: |
+          PLISTS=$(find . -name "Info.plist" ! -path "*/Pods/*" ! -path "*/.build/*" 2>/dev/null)
+          for plist in $PLISTS; do
+            echo "🔐 Configuring ITSAppUsesNonExemptEncryption in $plist..."
+            if plutil -extract ITSAppUsesNonExemptEncryption raw "$plist" >/dev/null 2>&1; then
+              plutil -replace ITSAppUsesNonExemptEncryption -bool ${{ inputs.uses_non_exempt_encryption }} "$plist"
+            else
+              plutil -insert ITSAppUsesNonExemptEncryption -bool ${{ inputs.uses_non_exempt_encryption }} "$plist"
+            fi
+          done
+          echo "✅ ITSAppUsesNonExemptEncryption set to ${{ inputs.uses_non_exempt_encryption }}"
+
+      #################################################
+      # Build Xcode Archive
+      #################################################
+      - name: Build Xcode Archive (.xcarchive)
+        env:
+          TEAM_ID: ${{ steps.ios_signing.outputs.team_id }}
+          PROFILE_NAME: ${{ steps.ios_signing.outputs.profile_name }}
+          BUILD_FLAG: ${{ steps.xcode_resolve.outputs.build_flag }}
+          SCHEME: ${{ steps.xcode_resolve.outputs.scheme }}
+        run: |
+          mkdir -p build/ios
+
+          echo "🔨 Archiving with scheme: $SCHEME, config: ${{ inputs.configuration }}..."
+          xcodebuild archive \
+            $BUILD_FLAG \
+            -scheme "$SCHEME" \
+            -configuration "${{ inputs.configuration }}" \
+            -archivePath "build/ios/${{ inputs.app_name }}.xcarchive" \
+            -destination "generic/platform=iOS" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            CODE_SIGN_STYLE="Manual" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            ${{ inputs.build_args }}
+
+      #################################################
+      # Export IPA from Archive
+      #################################################
+      - name: Export IPA from Archive
+        run: |
+          EXPORT_OPTIONS="${{ steps.ios_signing.outputs.export_options }}"
+          mkdir -p build/ios/ipa
+
+          echo "📦 Exporting IPA using $EXPORT_OPTIONS..."
+          xcodebuild -exportArchive \
+            -archivePath "build/ios/${{ inputs.app_name }}.xcarchive" \
+            -exportPath "build/ios/ipa" \
+            -exportOptionsPlist "$EXPORT_OPTIONS"
+
+      #################################################
+      # Upload Artifact to GitHub Actions
+      #################################################
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}-ipa
+          path: build/ios/ipa/*.ipa
+          if-no-files-found: error
+          retention-days: 30
+
+      #################################################
+      # Attach IPA to GitHub Release
+      #################################################
+      - name: Attach IPA to GitHub Release
+        if: ${{ inputs.attach_to_release }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v${{ steps.versioning.outputs.build_name }}"
+          echo "🏷️ Target Release Tag: $TAG"
+
+          IPA_FILE=$(find build/ios/ipa -name "*.ipa" 2>/dev/null | head -n 1)
+          if [ -n "$IPA_FILE" ] && [ -f "$IPA_FILE" ]; then
+            NAMED_IPA="build/ios/ipa/${{ inputs.app_name }}-v${{ steps.versioning.outputs.build_name }}-${{ steps.versioning.outputs.build_number }}.ipa"
+            if [ "$IPA_FILE" != "$NAMED_IPA" ]; then
+              cp "$IPA_FILE" "$NAMED_IPA"
+            fi
+
+            echo "📦 Menyiapkan upload file IPA: $NAMED_IPA"
+
+            if gh release view "$TAG" >/dev/null 2>&1; then
+              echo "✅ GitHub Release $TAG ditemukan. Mengupload IPA..."
+              gh release upload "$TAG" "$NAMED_IPA" --clobber
+            else
+              echo "ℹ️ Release $TAG belum ada di GitHub. Membuat release baru..."
+              gh release create "$TAG" "$NAMED_IPA" \
+                --title "${{ inputs.app_name }} $TAG" \
+                --notes "Automated release build for ${{ inputs.app_name }} $TAG" || true
+            fi
+          else
+            echo "ℹ️ Tidak ada file IPA yang ditemukan untuk di-upload."
+          fi
+
+      #################################################
+      # Build Step Summary
+      #################################################
+      - name: Generate Build Summary
+        if: always()
+        run: |
+          echo "## 🔨 Swift iOS (SwiftUI) Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Scheme** | \`${{ steps.xcode_resolve.outputs.scheme }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version Name** | \`${{ steps.versioning.outputs.build_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Build Number** | \`${{ steps.versioning.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Export Compliance** | \`ITSAppUsesNonExemptEncryption=${{ inputs.uses_non_exempt_encryption }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Direct Download IPA** | [📦 Download IPA via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.versioning.outputs.build_name }}) |" >> $GITHUB_STEP_SUMMARY
+
+      #################################################
+      # Clean up Keychain
+      #################################################
+      - name: Clean up Keychain and Provisioning Profiles
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db 2>/dev/null || true
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision 2>/dev/null || true
+
+  deploy-testflight:
+    name: Deploy to Apple TestFlight
+    needs: build-ios
+    if: ${{ inputs.upload_to_testflight }}
+    runs-on: ${{ inputs.runs_on }}
+
+    steps:
+      #################################################
+      # Download IPA Artifact
+      #################################################
+      - name: Download IPA Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.app_name }}-v${{ needs.build-ios.outputs.build_name }}-${{ needs.build-ios.outputs.build_number }}-ipa
+          path: build/ios/ipa
+
+      #################################################
+      # Find Built IPA Path
+      #################################################
+      - name: Find Built IPA Path
+        id: find_ipa
+        run: |
+          IPA_FILE=$(find build/ios/ipa -name "*.ipa" -type f | head -n 1)
+          if [ -z "$IPA_FILE" ]; then
+            echo "❌ No .ipa file found in build/ios/ipa/"
+            exit 1
+          fi
+          echo "ipa_path=$IPA_FILE" >> $GITHUB_OUTPUT
+          echo "📦 Found IPA: $IPA_FILE"
+
+      #################################################
+      # Prepare App Store Connect Key
+      #################################################
+      - name: Prepare App Store Connect Key
+        id: asc_key
+        env:
+          RAW_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          if [ -z "$RAW_KEY" ] || [ -z "$KEY_ID" ] || [ -z "$ISSUER_ID" ]; then
+            echo "⚠️ App Store Connect credentials not fully configured. Skipping TestFlight deployment."
+            echo "configured=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          if echo "$RAW_KEY" | grep -q "BEGIN"; then
+            DECODED="$RAW_KEY"
+          else
+            DECODED=$(echo "$RAW_KEY" | base64 --decode)
+          fi
+
+          echo "key<<EOF" >> $GITHUB_OUTPUT
+          echo "$DECODED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "configured=true" >> $GITHUB_OUTPUT
+
+      #################################################
+      # Deploy to TestFlight
+      #################################################
+      - name: Deploy to TestFlight
+        if: ${{ steps.asc_key.outputs.configured == 'true' }}
+        uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: ${{ steps.find_ipa.outputs.ipa_path }}
+          issuer-id: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ steps.asc_key.outputs.key }}
+
+      #################################################
+      # Deployment Step Summary
+      #################################################
+      - name: Generate TestFlight Deploy Summary
+        if: always()
+        run: |
+          echo "## 🍏 TestFlight Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "| Parameter | Status / Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **App Name** | \`${{ inputs.app_name }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Version & Build** | \`${{ needs.build-ios.outputs.build_name }}+${{ needs.build-ios.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.asc_key.outputs.configured }}" == "true" ]; then
+            echo "| **Upload Status** | ✅ **Berhasil Terupload ke TestFlight** |" >> $GITHUB_STEP_SUMMARY
+            echo "| **App Store Console** | [Buka TestFlight Console](https://appstoreconnect.apple.com) |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> ⏱️ **Info Apple Processing:** Setelah upload berhasil, Apple membutuhkan waktu **5 - 15 menit** untuk memproses binary sebelum build muncul di daftar aktif TestFlight." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Upload Status** | ⚠️ **Dilewati (Skipped)** - *Secrets API Key App Store Connect belum lengkap* |" >> $GITHUB_STEP_SUMMARY
+          fi

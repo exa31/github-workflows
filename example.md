@@ -215,3 +215,76 @@ jobs:
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
 ```
+
+---
+
+## Contoh Kotlin Android (Jetpack Compose) (Lengkap)
+
+```yaml
+name: Deploy Kotlin Android (Compose)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  deploy-android:
+    uses: exa31/github-workflows/.github/workflows/compose-android.yml@main
+    with:
+      app_name: cyber-compose
+      java_version: "17"
+      module_name: "app"
+      build_type: "both" # builds .aab (Play Store) AND .apk (Direct Download di GitHub Releases)
+      package_name: "com.exa.cybercompose"
+      track: "internal"
+      status: "completed"
+      upload_to_play_store: true
+    secrets:
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      PLAY_STORE_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+```
+
+---
+
+## Contoh Swift iOS (SwiftUI) (Lengkap)
+
+```yaml
+name: Deploy Swift iOS (SwiftUI)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  deploy-ios:
+    uses: exa31/github-workflows/.github/workflows/swiftui-ios.yml@main
+    with:
+      app_name: cyber-swiftui
+      upload_to_testflight: true
+      uses_non_exempt_encryption: false
+    secrets:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+```
+
