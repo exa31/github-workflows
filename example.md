@@ -288,3 +288,43 @@ jobs:
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
 ```
 
+---
+
+## 🏢 Setup Monorepo (Bebas Tabrakan Git Tag & Release)
+
+Jika repositori Anda adalah **Monorepo** (terdapat Backend, Frontend, Android, dan iOS dalam 1 git repository yang sama), tambahkan parameter `tag_prefix` pada caller workflow agar Semantic Release dan GitHub Release tidak saling menimpa (*collision*):
+
+| Target | Rekomendasi `tag_prefix` | Contoh Git Tag & GitHub Release yang Dihasilkan |
+|---|---|---|
+| **Backend** | `backend-` (atau `be-`) | `backend-v1.0.0` |
+| **Frontend** | `frontend-` (atau `fe-`) | `frontend-v1.0.0` |
+| **Android (Flutter / Compose)** | `android-` | `android-v1.0.0` |
+| **iOS (Flutter / SwiftUI)** | `ios-` | `ios-v1.0.0` |
+
+### Contoh Cuplikan Pemanggilan di Monorepo:
+
+```yaml
+# .github/workflows/deploy-ios.yml
+jobs:
+  deploy-ios:
+    uses: exa31/github-workflows/.github/workflows/swiftui-ios.yml@main # atau flutter-ios.yml@main
+    with:
+      app_name: cyber-ios
+      tag_prefix: "ios-"   # 👈 Tag yang dibuat: ios-v1.0.0
+      upload_to_testflight: true
+    secrets:
+      ...
+
+# .github/workflows/deploy-android.yml
+jobs:
+  deploy-android:
+    uses: exa31/github-workflows/.github/workflows/compose-android.yml@main # atau flutter-android.yml@main
+    with:
+      app_name: cyber-android
+      tag_prefix: "android-" # 👈 Tag yang dibuat: android-v1.0.0
+      upload_to_play_store: true
+    secrets:
+      ...
+```
+
+

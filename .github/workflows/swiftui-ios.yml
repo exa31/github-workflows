@@ -72,6 +72,11 @@ on:
         required: false
         default: false
         type: boolean
+      tag_prefix:
+        description: "Git Tag Prefix for Monorepo (e.g. 'ios-')"
+        required: false
+        default: ""
+        type: string
 
   workflow_call:
     inputs:
@@ -144,6 +149,11 @@ on:
         required: false
         default: false
         type: boolean
+      tag_prefix:
+        description: "Git Tag Prefix for Monorepo (e.g. 'ios-')"
+        required: false
+        default: ""
+        type: string
 
     secrets:
       ENV_FILE:
@@ -185,6 +195,7 @@ jobs:
     outputs:
       build_name: ${{ steps.versioning.outputs.build_name }}
       build_number: ${{ steps.versioning.outputs.build_number }}
+      release_tag: ${{ steps.versioning.outputs.release_tag }}
 
     steps:
       #################################################
@@ -225,7 +236,12 @@ jobs:
         if: ${{ inputs.enable_semantic_release }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: npx semantic-release || echo "Semantic release completed or skipped without new version."
+        run: |
+          if [ -n "${{ inputs.tag_prefix }}" ]; then
+            npx semantic-release --tag-format "${{ inputs.tag_prefix }}v\${version}" || echo "Semantic release completed or skipped without new version."
+          else
+            npx semantic-release || echo "Semantic release completed or skipped without new version."
+          fi
 
       #################################################
       # Setup Environment Configuration (.env)
@@ -392,11 +408,21 @@ jobs:
           if [ -n "${{ inputs.build_name }}" ]; then
             BUILD_NAME="${{ inputs.build_name }}"
           else
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            if [ -n "$LATEST_TAG" ]; then
-              BUILD_NAME="${LATEST_TAG#v}"
+            if [ -n "${{ inputs.tag_prefix }}" ]; then
+              RAW_TAG=$(git describe --tags --match "${{ inputs.tag_prefix }}v*" --abbrev=0 2>/dev/null || echo "")
+              if [ -n "$RAW_TAG" ]; then
+                PREFIX="${{ inputs.tag_prefix }}v"
+                BUILD_NAME="${RAW_TAG#$PREFIX}"
+              else
+                BUILD_NAME="1.0.0"
+              fi
             else
-              BUILD_NAME="1.0.0"
+              LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+              if [ -n "$LATEST_TAG" ]; then
+                BUILD_NAME="${LATEST_TAG#v}"
+              else
+                BUILD_NAME="1.0.0"
+              fi
             fi
           fi
 
@@ -407,9 +433,12 @@ jobs:
             BUILD_NUMBER="${{ github.run_number }}"
           fi
 
+          TAG="${{ inputs.tag_prefix }}v${BUILD_NAME}"
+
           echo "build_name=$BUILD_NAME" >> $GITHUB_OUTPUT
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          echo "🚀 Build Name: $BUILD_NAME, Build Number: $BUILD_NUMBER"
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "🚀 Build Name: $BUILD_NAME, Build Number: $BUILD_NUMBER, Release Tag: $TAG"
 
       #################################################
       # Auto-bump Xcode Project Version & Commit
@@ -525,7 +554,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          TAG="v${{ steps.versioning.outputs.build_name }}"
+          TAG="${{ steps.versioning.outputs.release_tag }}"
           echo "🏷️ Target Release Tag: $TAG"
 
           IPA_FILE=$(find build/ios/ipa -name "*.ipa" 2>/dev/null | head -n 1)
@@ -564,7 +593,7 @@ jobs:
           echo "| **Version Name** | \`${{ steps.versioning.outputs.build_name }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Build Number** | \`${{ steps.versioning.outputs.build_number }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Export Compliance** | \`ITSAppUsesNonExemptEncryption=${{ inputs.uses_non_exempt_encryption }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Direct Download IPA** | [📦 Download IPA via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.versioning.outputs.build_name }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Direct Download IPA** | [📦 Download IPA via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versioning.outputs.release_tag }}) |" >> $GITHUB_STEP_SUMMARY
 
       #################################################
       # Clean up Keychain

@@ -50,6 +50,7 @@ permissions:
 | `rollout_timeout` | ❌ | `180s` | Timeout rollout K8s |
 | `build_args` | ❌ | `""` | Build args Docker |
 | `push_latest` | ❌ | `true` | Push tag `latest` |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `backend-` ➔ `backend-v1.0.0`) |
 
 ### Secrets
 
@@ -116,6 +117,7 @@ jobs:
 | `rollout_timeout` | ❌ | `180s` | Timeout rollout K8s |
 | `build_args` | ❌ | `""` | Build args Docker |
 | `push_latest` | ❌ | `true` | Push tag `latest` |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `frontend-` ➔ `frontend-v1.0.0`) |
 
 ### Secrets
 
@@ -188,6 +190,7 @@ Workflow ini otomatis melakukan setup Java, Flutter, decode keystore `.jks`, gen
 | `upload_to_play_store` | ❌ | `true` | Upload ke Google Play Console |
 | `track` | ❌ | `internal` | Track Play Store (`internal`, `alpha`, `beta`, `production`) |
 | `status` | ❌ | `completed` | Status rilis (`completed`, `draft`, `inProgress`) |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `android-` ➔ `android-v1.0.0`) |
 
 ### Secrets
 
@@ -253,6 +256,7 @@ Workflow ini berjalan di runner **macOS** (`macos-latest`), mengimpor Apple Dist
 | `attach_to_release` | ❌ | `true` | Otomatis upload file IPA ke GitHub Releases |
 | `upload_to_testflight` | ❌ | `true` | Upload ke TestFlight |
 | `uses_non_exempt_encryption` | ❌ | `false` | Set `ITSAppUsesNonExemptEncryption` di `Info.plist` (hilangkan warning Missing Compliance) |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `ios-` ➔ `ios-v1.0.0`) |
 | `runs_on` | ❌ | `macos-latest` | Runner OS (`macos-latest`, `macos-14`, atau self-hosted) |
 
 ### Secrets
@@ -327,6 +331,7 @@ File workflow: `.github/workflows/compose-android.yml`
 | `upload_to_play_store` | ❌ | `true` | Upload ke Google Play Console |
 | `track` | ❌ | `internal` | Track Play Store (`internal`, `alpha`, `beta`, `production`) |
 | `status` | ❌ | `completed` | Status rilis (`completed`, `draft`, `inProgress`, `halted`) |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `android-` ➔ `android-v1.0.0`) |
 
 ### Secrets
 
@@ -398,6 +403,7 @@ File workflow: `.github/workflows/swiftui-ios.yml`
 | `attach_to_release` | ❌ | `true` | Otomatis upload file IPA ke GitHub Releases |
 | `upload_to_testflight` | ❌ | `true` | Upload ke TestFlight |
 | `uses_non_exempt_encryption` | ❌ | `false` | Set `ITSAppUsesNonExemptEncryption` di `Info.plist` (hilangkan dialog Missing Compliance TestFlight) |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `ios-` ➔ `ios-v1.0.0`) |
 
 ### Secrets
 

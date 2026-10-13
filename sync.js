@@ -19,36 +19,36 @@ const REPOSITORIES_SECRETS = [
 // Daftar repo yang membutuhkan VARIABLES (Misal: Frontend yang butuh setting tema/API URL)
 const REPOSITORIES_VARS = [
   // "https://github.com/exa31/fe-chat-app"
-  "https://github.com/exa31/task-management"
+  // "https://github.com/exa31/task-management"
 ];
 
 // =========================================================================
 // 2. TENTUKAN NAMA SECRET & VARIABLE YANG MAU DI-SYNC
 // =========================================================================
 const SECRETS_TO_SYNC = [
-  "SSH_KEY",
-  "VPS_HOST",
-  "GHCR_TOKEN",
+  // "SSH_KEY",
+  // "VPS_HOST",
+  // "GHCR_TOKEN",
   // Secrets Mobile (Aktifkan jika sync ke repo mobile/Flutter):
   // "ANDROID_KEYSTORE_BASE64",
   // "ANDROID_KEYSTORE_PASSWORD",
   // "ANDROID_KEY_ALIAS",
   // "ANDROID_KEY_PASSWORD",
   // "PLAY_STORE_SERVICE_ACCOUNT_JSON",
-  // "APPLE_CERTIFICATE_BASE64",
-  // "APPLE_CERTIFICATE_PASSWORD",
-  // "APPLE_PROVISIONING_PROFILE_BASE64",
-  // "APP_STORE_CONNECT_API_KEY_BASE64",
-  // "APP_STORE_CONNECT_KEY_ID",
-  // "APP_STORE_CONNECT_ISSUER_ID",
+  "APPLE_CERTIFICATE_BASE64",
+  "APPLE_CERTIFICATE_PASSWORD",
+  "APPLE_PROVISIONING_PROFILE_BASE64",
+  "APP_STORE_CONNECT_API_KEY_BASE64",
+  "APP_STORE_CONNECT_KEY_ID",
+  "APP_STORE_CONNECT_ISSUER_ID",
 ];
 const VARS_TO_SYNC = [
   // "VITE_WS_URL",
   // "VITE_APP_API_URL",
   // "VITE_GOOGLE_CLIENT_ID",
-  "VITE_ENABLE_MOCKS",
-  "VITE_GOOGLE_CLIENT_ID",
-  "VITE_APPLE_CLIENT_ID",
+  // "VITE_ENABLE_MOCKS",
+  // "VITE_GOOGLE_CLIENT_ID",
+  // "VITE_APPLE_CLIENT_ID",
 
 ];
 

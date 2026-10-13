@@ -77,6 +77,11 @@ on:
         required: false
         default: "completed"
         type: string
+      tag_prefix:
+        description: "Git Tag Prefix for Monorepo (e.g. 'android-' or 'flutter-')"
+        required: false
+        default: ""
+        type: string
 
   workflow_call:
     inputs:
@@ -154,6 +159,11 @@ on:
         required: false
         default: "completed"
         type: string
+      tag_prefix:
+        description: "Git Tag Prefix for Monorepo (e.g. 'android-' or 'flutter-')"
+        required: false
+        default: ""
+        type: string
 
     secrets:
       ENV_FILE:
@@ -192,6 +202,7 @@ jobs:
     outputs:
       build_name: ${{ steps.versioning.outputs.build_name }}
       build_number: ${{ steps.versioning.outputs.build_number }}
+      release_tag: ${{ steps.versioning.outputs.release_tag }}
 
     steps:
       #################################################
@@ -232,7 +243,12 @@ jobs:
         if: ${{ inputs.enable_semantic_release }}
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: npx semantic-release || echo "Semantic release completed or skipped without new version."
+        run: |
+          if [ -n "${{ inputs.tag_prefix }}" ]; then
+            npx semantic-release --tag-format "${{ inputs.tag_prefix }}v\${version}" || echo "Semantic release completed or skipped without new version."
+          else
+            npx semantic-release || echo "Semantic release completed or skipped without new version."
+          fi
 
       #################################################
       # Setup Java JDK
@@ -320,12 +336,23 @@ jobs:
           if [ -n "${{ inputs.build_name }}" ]; then
             BUILD_NAME="${{ inputs.build_name }}"
           else
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-            if [ -n "$LATEST_TAG" ]; then
-              BUILD_NAME="${LATEST_TAG#v}"
+            if [ -n "${{ inputs.tag_prefix }}" ]; then
+              RAW_TAG=$(git describe --tags --match "${{ inputs.tag_prefix }}v*" --abbrev=0 2>/dev/null || echo "")
+              if [ -n "$RAW_TAG" ]; then
+                PREFIX="${{ inputs.tag_prefix }}v"
+                BUILD_NAME="${RAW_TAG#$PREFIX}"
+              else
+                PUBSPEC_VER=$(grep -E '^version:' pubspec.yaml 2>/dev/null | awk '{print $2}' | cut -d'+' -f1 || echo "")
+                BUILD_NAME="${PUBSPEC_VER:-1.0.0}"
+              fi
             else
-              PUBSPEC_VER=$(grep -E '^version:' pubspec.yaml 2>/dev/null | awk '{print $2}' | cut -d'+' -f1 || echo "")
-              BUILD_NAME="${PUBSPEC_VER:-1.0.0}"
+              LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+              if [ -n "$LATEST_TAG" ]; then
+                BUILD_NAME="${LATEST_TAG#v}"
+              else
+                PUBSPEC_VER=$(grep -E '^version:' pubspec.yaml 2>/dev/null | awk '{print $2}' | cut -d'+' -f1 || echo "")
+                BUILD_NAME="${PUBSPEC_VER:-1.0.0}"
+              fi
             fi
           fi
 
@@ -336,9 +363,12 @@ jobs:
             BUILD_NUMBER="${{ github.run_number }}"
           fi
 
+          TAG="${{ inputs.tag_prefix }}v${BUILD_NAME}"
+
           echo "build_name=$BUILD_NAME" >> $GITHUB_OUTPUT
           echo "build_number=$BUILD_NUMBER" >> $GITHUB_OUTPUT
-          echo "🚀 Build Name: $BUILD_NAME, Build Number (Version Code): $BUILD_NUMBER"
+          echo "release_tag=$TAG" >> $GITHUB_OUTPUT
+          echo "🚀 Build Name: $BUILD_NAME, Build Number (Version Code): $BUILD_NUMBER, Release Tag: $TAG"
 
       #################################################
       # Auto-bump pubspec.yaml & Commit
@@ -421,7 +451,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          TAG="v${{ steps.versioning.outputs.build_name }}"
+          TAG="${{ steps.versioning.outputs.release_tag }}"
           echo "🏷️ Target Release Tag: $TAG"
 
           FILES_TO_UPLOAD=()
@@ -487,7 +517,7 @@ jobs:
           echo "| **Build Type** | \`${{ inputs.build_type }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| **Flutter Version** | \`${{ inputs.flutter_version }}\` |" >> $GITHUB_STEP_SUMMARY
           if [ "${{ inputs.build_type }}" == "apk" ] || [ "${{ inputs.build_type }}" == "both" ]; then
-            echo "| **Direct Download APK** | [📱 Download APK via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.versioning.outputs.build_name }}) |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Direct Download APK** | [📱 Download APK via GitHub Releases](https://github.com/${{ github.repository }}/releases/tag/${{ steps.versioning.outputs.release_tag }}) |" >> $GITHUB_STEP_SUMMARY
           fi
 
   deploy-play-store:
