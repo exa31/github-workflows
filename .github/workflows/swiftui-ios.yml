@@ -497,6 +497,28 @@ jobs:
           echo "✅ ITSAppUsesNonExemptEncryption set to ${{ inputs.uses_non_exempt_encryption }}"
 
       #################################################
+      # Configure Manual Signing in Xcode Project
+      #################################################
+      - name: Configure Manual Signing in Xcode Project
+        env:
+          PROFILE_NAME: ${{ steps.ios_signing.outputs.profile_name }}
+          TEAM_ID: ${{ steps.ios_signing.outputs.team_id }}
+        run: |
+          if [ -n "$PROFILE_NAME" ]; then
+            echo "🔧 Configuring PROVISIONING_PROFILE_SPECIFIER ($PROFILE_NAME) in Xcode project..."
+            PBX_FILES=$(find . -name "project.pbxproj" ! -path "*/Pods/*" ! -path "*/.build/*" 2>/dev/null)
+            for pbx in $PBX_FILES; do
+              if grep -q "PROVISIONING_PROFILE_SPECIFIER" "$pbx"; then
+                sed -i '' -E "s/PROVISIONING_PROFILE_SPECIFIER = [^;]+;/PROVISIONING_PROFILE_SPECIFIER = \"${PROFILE_NAME}\";/g" "$pbx"
+              else
+                sed -i '' -E "s/(DEVELOPMENT_TEAM = [^;]+;)/\1\n\t\t\t\tPROVISIONING_PROFILE_SPECIFIER = \"${PROFILE_NAME}\";/g" "$pbx"
+              fi
+              sed -i '' -E 's/CODE_SIGN_STYLE = Automatic;/CODE_SIGN_STYLE = Manual;/g' "$pbx"
+            done
+            echo "✅ Xcode project signing configuration updated."
+          fi
+
+      #################################################
       # Build Xcode Archive
       #################################################
       - name: Build Xcode Archive (.xcarchive)
@@ -517,7 +539,6 @@ jobs:
             -destination "generic/platform=iOS" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CODE_SIGN_STYLE="Manual" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME" \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             ${{ inputs.build_args }}
 
