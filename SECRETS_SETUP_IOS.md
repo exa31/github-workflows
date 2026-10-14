@@ -75,6 +75,16 @@ Provisioning Profile menghubungkan App ID (Bundle Identifier) aplikasi Anda deng
 5. Beri nama profile, misalnya: `MyApp_AppStore_Profile`.
 6. Klik **Generate**, lalu klik **Download**. File akan tersimpan dengan ekstensi `.mobileprovision` (misal: `MyApp_AppStore_Profile.mobileprovision`).
 
+### 2.3 Khusus Proyek Multi-Module (Aplikasi Utama + Widget / Ekstensi)
+Jika proyek iOS Anda memiliki modul atau target tambahan (seperti **Widget Extension**, **Live Activities**, atau **Notification Service**):
+1. **Daftarkan Identifier Modul**: Di menu **Identifiers**, daftarkan Bundle ID modul (misal: `com.example.myapp.widget`).
+2. **Buat Profile Distribusi Modul**: Di menu **Profiles**, buat App Store Distribution Profile baru untuk identifier modul tersebut (misal: `MyApp_Widget_AppStore_Profile.mobileprovision`).
+3. **Gabungkan ke Base64**: Encode kedua profile sekaligus dipisahkan baris `---` untuk disimpan di secret `APPLE_PROVISIONING_PROFILES_BASE64`:
+   ```bash
+   (base64 -i MyApp_AppStore_Profile.mobileprovision; echo ""; echo "---"; echo ""; base64 -i MyApp_Widget_AppStore_Profile.mobileprovision) | pbcopy
+   ```
+   *Atau Anda juga dapat menyimpannya di secret terpisah `APPLE_PROVISIONING_PROFILE_BASE64` (untuk app) dan `APPLE_PROVISIONING_PROFILE_WIDGET_BASE64` (untuk widget).*
+
 ---
 
 ## 🔑 Langkah 3: App Store Connect API Key (Untuk Deploy ke TestFlight)

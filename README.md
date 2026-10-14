@@ -17,6 +17,7 @@ Branch: `main`
 | Flutter iOS              | `.github/workflows/flutter-ios.yml`     | Build IPA + deploy ke Apple TestFlight / App Store |
 | Kotlin Android (Compose) | `.github/workflows/compose-android.yml` | Build APK/AAB + deploy ke Google Play Console (Jetpack Compose) |
 | Swift iOS (SwiftUI)      | `.github/workflows/swiftui-ios.yml`     | Build IPA + deploy ke Apple TestFlight / App Store (SwiftUI) |
+| Swift iOS Multi-Module   | `.github/workflows/swiftui-ios-multimodule.yml` | Build IPA Multi-Module (Main App + Widget/Extensions) + deploy TestFlight |
 
 ---
 
@@ -444,6 +445,92 @@ jobs:
       APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
       APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
       APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+```
+
+---
+
+## Swift iOS Multi-Module (SwiftUI + Widgets / Extensions)
+
+Workflow ini dirancang khusus untuk proyek iOS tingkat lanjut yang memiliki **banyak modul / target sekaligus**, seperti aplikasi utama SwiftUI yang dilengkapi dengan **Widget Extension**, **Live Activities**, **Notification Service Extension**, atau ekstensi lainnya.
+
+File workflow: `.github/workflows/swiftui-ios-multimodule.yml`
+
+### Keunggulan Khusus Multi-Module:
+1. **Dukungan Banyak Provisioning Profiles**: Menerima profil untuk aplikasi utama dan ekstensi melalui secret `APPLE_PROVISIONING_PROFILES_BASE64` (dipisahkan delimiter `---` atau format JSON/ZIP), atau secret terpisah `APPLE_PROVISIONING_PROFILE_WIDGET_BASE64` dan `APPLE_PROVISIONING_PROFILE_BASE64`.
+2. **Pencocokan Izin Cerdas (Smart Matching)**: Secara otomatis menganalisis AST proyek Xcode, membaca Bundle ID dari setiap Target/Modul, dan memasangkan Provisioning Profile yang tepat ke masing-masing modul. Tidak menimpa seluruh target dengan satu profil yang sama!
+3. **ExportOptions.plist Komprehensif**: Otomatis mendaftarkan seluruh dictionary pasangan `bundle_id` -> `provisioning_profile` ke dalam `provisioningProfiles` pada `ExportOptions.plist`, sehingga ekspor TestFlight bebas dari error perizinan modul tambahan.
+4. **Fitur Inti Lengkap**: Penomoran otomatis Semver, auto-bump `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`, build `.xcarchive` & `.ipa`, upload ke GitHub Artifacts & Release, serta pengiriman otomatis ke **Apple TestFlight**.
+
+### Inputs
+
+| Input | Required | Default | Deskripsi |
+|---|---|---|---|
+| `app_name` | ✅ | - | Nama aplikasi utama (misal: `cyber-swiftui`) |
+| `workspace_or_project` | ❌ | `""` | Path `.xcworkspace` atau `.xcodeproj` (auto-detect jika kosong) |
+| `scheme` | ❌ | `""` | Xcode Scheme target rilis (auto-detect jika kosong) |
+| `configuration` | ❌ | `Release` | Xcode Build Configuration (`Release` / `Debug`) |
+| `runs_on` | ❌ | `macos-latest` | Runner macOS (`macos-latest`, `macos-14`, atau `macos-15`) |
+| `enable_semantic_release` | ❌ | `true` | Otomatis hitung semver, buat Git Tag, dan GitHub Release |
+| `update_project_version` | ❌ | `true` | Auto-bump `MARKETING_VERSION` & `CURRENT_PROJECT_VERSION` di `project.pbxproj` |
+| `build_name` | ❌ | - | Override manual versi (misal: `1.0.0`). Default: semantic release tag |
+| `build_number` | ❌ | - | Override integer Build Number. Default: `github.run_number` |
+| `build_args` | ❌ | `""` | Argumen tambahan `xcodebuild` |
+| `attach_to_release` | ❌ | `true` | Otomatis upload file IPA ke GitHub Releases |
+| `upload_to_testflight` | ❌ | `true` | Upload ke TestFlight |
+| `uses_non_exempt_encryption` | ❌ | `false` | Set `ITSAppUsesNonExemptEncryption` di `Info.plist` (bypass dialog Missing Compliance TestFlight) |
+| `tag_prefix` | ❌ | `""` | Prefix Git tag untuk monorepo (misal: `ios-` ➔ `ios-v1.0.0`) |
+
+### Secrets
+
+| Secret | Required | Deskripsi |
+|---|---|---|
+| `APPLE_CERTIFICATE_BASE64` | ✅ | Sertifikat distribusi `.p12` di-encode base64 |
+| `APPLE_CERTIFICATE_PASSWORD` | ✅ | Password sertifikat `.p12` |
+| `APPLE_PROVISIONING_PROFILES_BASE64` | ⚠️ | Kumpulan Provisioning Profiles di-encode base64 (dipisahkan baris `---`, JSON array, atau archive `.zip` base64) |
+| `APPLE_PROVISIONING_PROFILE_BASE64` | ⚠️ | Profil aplikasi utama (atau multi-profil dengan pemisah `---`) |
+| `APPLE_PROVISIONING_PROFILE_WIDGET_BASE64` | ❌ | Profil khusus target Widget Extension (opsional jika dipisah) |
+| `APPLE_PROVISIONING_PROFILE_EXTENSION_BASE64` | ❌ | Profil khusus target Extension tambahan (opsional) |
+| `APP_STORE_CONNECT_API_KEY_BASE64` | ❌ | Private Key App Store Connect (`AuthKey_XXXX.p8`) |
+| `APP_STORE_CONNECT_KEY_ID` | ❌ | Key ID 10 karakter dari App Store Connect |
+| `APP_STORE_CONNECT_ISSUER_ID` | ❌ | Issuer ID (UUID) dari App Store Connect |
+| `ENV_FILE` | ❌ | Isi file `.env` aplikasi jika menggunakan secrets environment |
+
+> *Catatan: Setidaknya sediakan salah satu antara `APPLE_PROVISIONING_PROFILES_BASE64` atau `APPLE_PROVISIONING_PROFILE_BASE64`.*
+
+### Cara Pakai
+
+```yaml
+name: Deploy Swift iOS Multi-Module (SwiftUI + Widget)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  deploy-ios:
+    uses: exa31/github-workflows/.github/workflows/swiftui-ios-multimodule.yml@main
+    with:
+      app_name: cyber-swiftui
+      upload_to_testflight: true
+      uses_non_exempt_encryption: false
+    secrets:
+      APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+      # Opsi A: Gabungan seluruh profile dipisahkan baris '---'
+      APPLE_PROVISIONING_PROFILES_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILES_BASE64 }}
+      # Opsi B: Atau pisahkan secret untuk App dan Widget
+      # APPLE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+      # APPLE_PROVISIONING_PROFILE_WIDGET_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_WIDGET_BASE64 }}
       APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
       APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
